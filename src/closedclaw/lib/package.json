@@ -1,0 +1,72 @@
+{
+  "name": "@closedclaw/crypto",
+  "version": "0.1.0",
+  "description": "Closedclaw cryptographic primitives - AES-256-GCM, Ed25519, Argon2id, envelope encryption",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check . --write"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^1.0.0",
+    "@noble/curves": "^1.6.0",
+    "@noble/hashes": "^1.5.0",
+    "hash-wasm": "^4.11.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./crypto": {
+      "types": "./dist/crypto/index.d.ts",
+      "import": "./dist/crypto/index.mjs",
+      "require": "./dist/crypto/index.js"
+    },
+    "./consent": {
+      "types": "./dist/consent/index.d.ts",
+      "import": "./dist/consent/index.mjs",
+      "require": "./dist/consent/index.js"
+    },
+    "./vault": {
+      "types": "./dist/vault/index.d.ts",
+      "import": "./dist/vault/index.mjs",
+      "require": "./dist/vault/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "privacy",
+    "encryption",
+    "gdpr",
+    "aes-256-gcm",
+    "ed25519",
+    "argon2",
+    "consent",
+    "cryptography"
+  ]
+}
