@@ -121,7 +121,7 @@ class MemoryBulkDeleteRequest(BaseModel):
 
 class MemoryExportRequest(BaseModel):
     """Schema for exporting memories."""
-    passphrase: str = Field(..., description="Encryption passphrase", min_length=8)
+    passphrase: str = Field(..., description="Encryption passphrase", min_length=12)
     include_audit: bool = Field(default=True, description="Include audit log")
     include_policies: bool = Field(default=True, description="Include policy rules")
 
@@ -138,7 +138,7 @@ class MemoryExportResponse(BaseModel):
 
 class MemoryImportRequest(BaseModel):
     """Schema for importing memories."""
-    passphrase: str = Field(..., description="Decryption passphrase", min_length=8)
+    passphrase: str = Field(..., description="Decryption passphrase", min_length=12)
     merge_strategy: Literal["skip", "replace", "merge"] = Field(
         default="skip",
         description="How to handle duplicate memories"

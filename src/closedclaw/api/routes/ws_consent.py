@@ -113,9 +113,10 @@ async def consent_ws(
     try:
         expected_token = settings.get_or_create_token()
     except Exception:
-        expected_token = None
+        await websocket.close(code=4500, reason="Token unavailable")
+        return
 
-    if not expected_token or not hmac.compare_digest(token, expected_token):
+    if not hmac.compare_digest(token, expected_token):
         await websocket.close(code=4401, reason="Unauthorized")
         return
 

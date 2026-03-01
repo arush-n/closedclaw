@@ -51,7 +51,7 @@ class PolicyUpdateRequest(BaseModel):
 
 
 class PolicyTestRequest(BaseModel):
-    memory_text: str
+    memory_text: str = Field(..., min_length=1, max_length=10000)
     sensitivity: int = Field(default=1, ge=0, le=3)
     tags: List[str] = Field(default_factory=list)
     source: str = "conversation"
@@ -157,6 +157,19 @@ async def create_policy(
     _save_custom_policy_set(settings, custom_set)
     reload_policy_engine(settings)
 
+    # Audit logging for policy mutation
+    try:
+        from closedclaw.api.routes.audit import add_audit_entry
+        import uuid
+        add_audit_entry(
+            request_id=f"policy-create-{uuid.uuid4()}",
+            provider="local",
+            model="policy-engine",
+            query_summary=f"Policy {message}: action={rule.action}, priority={rule.priority}",
+        )
+    except Exception as e:
+        logger.warning(f"Policy create audit logging failed: {e}")
+
     return PolicyMutationResponse(success=True, rule=rule, message=message)
 
 
@@ -185,6 +198,19 @@ async def update_policy(
     _save_custom_policy_set(settings, custom_set)
     reload_policy_engine(settings)
 
+    # Audit logging for policy update
+    try:
+        from closedclaw.api.routes.audit import add_audit_entry
+        import uuid
+        add_audit_entry(
+            request_id=f"policy-update-{uuid.uuid4()}",
+            provider="local",
+            model="policy-engine",
+            query_summary=f"Policy updated: '{policy_id}', fields={list(payload.model_dump(exclude_unset=True).keys())}",
+        )
+    except Exception as e:
+        logger.warning(f"Policy update audit logging failed: {e}")
+
     return PolicyMutationResponse(
         success=True,
         rule=updated,
@@ -209,6 +235,19 @@ async def delete_policy(
 
     _save_custom_policy_set(settings, custom_set)
     reload_policy_engine(settings)
+
+    # Audit logging for policy deletion
+    try:
+        from closedclaw.api.routes.audit import add_audit_entry
+        import uuid
+        add_audit_entry(
+            request_id=f"policy-delete-{uuid.uuid4()}",
+            provider="local",
+            model="policy-engine",
+            query_summary=f"Policy deleted: '{policy_id}'",
+        )
+    except Exception as e:
+        logger.warning(f"Policy delete audit logging failed: {e}")
 
     return PolicyMutationResponse(
         success=True,

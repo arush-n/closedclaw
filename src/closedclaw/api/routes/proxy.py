@@ -284,7 +284,11 @@ async def _enrich_with_memory(
     query = latest_user_message.content or ""
     if not query:
         return messages, info
-    
+
+    # Truncate extremely long queries to prevent DoS on embedding search
+    if len(query) > 4096:
+        query = query[:4096]
+
     # Search for relevant memories
     search_results = memory.search(
         query=query,
