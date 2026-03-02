@@ -29,6 +29,7 @@ export const GraphCanvas = memo<GraphCanvasProps>(
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animationRef = useRef<number>(0);
     const mousePos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const mouseDownPos = useRef<{ x: number; y: number } | null>(null);
     const currentHoveredNode = useRef<string | null>(null);
     const startTimeRef = useRef<number>(Date.now());
     const nodeMapRef = useRef<Map<string, GraphNode>>(new Map());
@@ -147,6 +148,7 @@ export const GraphCanvas = memo<GraphCanvasProps>(
 
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
+        mouseDownPos.current = { x: e.clientX, y: e.clientY };
 
         const nodeId = getNodeAtPosition(x, y);
         if (nodeId) {
@@ -166,15 +168,29 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
+        // Check if this was a click (minimal movement) vs a drag
+        const wasClick =
+          mouseDownPos.current &&
+          Math.abs(e.clientX - mouseDownPos.current.x) < 5 &&
+          Math.abs(e.clientY - mouseDownPos.current.y) < 5;
+
         if (draggingNodeId) {
           onNodeDragEnd();
+          // If barely moved, treat as a click on the node
+          if (wasClick) {
+            onNodeClick(draggingNodeId);
+          }
         } else {
-          const nodeId = getNodeAtPosition(x, y);
-          if (nodeId) {
-            onNodeClick(nodeId);
+          if (wasClick) {
+            const nodeId = getNodeAtPosition(x, y);
+            if (nodeId) {
+              onNodeClick(nodeId);
+            }
           }
           onPanEnd();
         }
+
+        mouseDownPos.current = null;
       },
       [draggingNodeId, getNodeAtPosition, onNodeClick, onNodeDragEnd, onPanEnd]
     );

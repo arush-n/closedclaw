@@ -254,7 +254,6 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
     panY,
     zoom,
     hoveredNode,
-    selectedNode,
     draggingNodeId,
     nodePositions,
     handlePanStart,
@@ -270,8 +269,10 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
     zoomOut,
     resetView,
     fitToViewport,
-    setSelectedNode,
   } = useGraphInteractions();
+
+  // Track multiple open panels
+  const [openPanels, setOpenPanels] = useState<GraphNode[]>([]);
 
   // Build graph data
   const { nodes, edges, stats } = useMemo(
@@ -337,8 +338,14 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
   const handleNodeClickWithCallback = useCallback(
     (nodeId: string) => {
       handleNodeClick(nodeId, nodes);
+      const node = nodes.find((n) => n.id === nodeId);
+      if (node) {
+        setOpenPanels((prev) => {
+          if (prev.some((p) => p.id === nodeId)) return prev;
+          return [...prev, node];
+        });
+      }
       if (onMemoryClick) {
-        const node = nodes.find((n) => n.id === nodeId);
         if (node && node.type === "memory") {
           onMemoryClick(node.data);
         }
@@ -439,7 +446,7 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
         onPanEnd={handlePanEnd}
         onWheel={handleWheel}
         draggingNodeId={draggingNodeId}
-        selectedNodeId={selectedNode?.id || null}
+        selectedNodeId={openPanels.length > 0 ? openPanels[openPanels.length - 1].id : null}
       />
 
       {/* Hover Tooltip */}
@@ -476,11 +483,15 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
         );
       })()}
 
-      {/* Node Detail Panel */}
-      <NodeDetailPanel
-        node={selectedNode}
-        onClose={() => setSelectedNode(null)}
-      />
+      {/* Node Detail Panels */}
+      {openPanels.map((node, i) => (
+        <NodeDetailPanel
+          key={node.id}
+          node={node}
+          index={i}
+          onClose={() => setOpenPanels((prev) => prev.filter((p) => p.id !== node.id))}
+        />
+      ))}
 
       {/* Legend */}
       {showLegend && <Legend stats={stats} isLoading={isLoading} />}
