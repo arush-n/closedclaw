@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(npx --yes tsc --noEmit --strict app/api/_lib/closedclaw.ts components/layout/app-shell.tsx)"
+    ]
+  }
+}
