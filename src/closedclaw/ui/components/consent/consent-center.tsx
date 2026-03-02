@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bell, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -45,6 +46,9 @@ export function ConsentCenter() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedReceipt, setCopiedReceipt] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const nextPending = useMemo(() => pending[0], [pending]);
 
@@ -136,6 +140,115 @@ export function ConsentCenter() {
     [loadPending, loadReceipts, nextPending]
   );
 
+  const modal = isOpen && mounted ? createPortal(
+    <div
+      className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) setIsOpen(false);
+      }}
+    >
+      <div
+        className="w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto glass-card rounded-2xl p-6 animate-fade-in"
+      >
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
+              <ShieldCheck className="w-4.5 h-4.5 text-violet-400" />
+            </div>
+            <h2 className="text-lg font-semibold text-slate-100">Consent Notifications</h2>
+          </div>
+          <button
+            onClick={() => setIsOpen(false)}
+            className="p-2 rounded-lg hover:bg-white/[0.06] text-slate-400 hover:text-white transition-all duration-200"
+            aria-label="Close consent modal"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {nextPending ? (
+          <div className="space-y-4">
+            <div className="rounded-xl glass-subtle p-4">
+              <div className="flex items-center gap-3 text-sm text-slate-400 mb-3 flex-wrap">
+                <span className="badge badge-neutral">
+                  <ShieldCheck className="w-3 h-3 mr-1.5" />
+                  {nextPending.rule_triggered}
+                </span>
+                <span className="badge badge-primary">{nextPending.provider}</span>
+                <span className="badge badge-warning">L{nextPending.sensitivity}</span>
+              </div>
+              <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{nextPending.memory_text}</p>
+            </div>
+
+            {error && <div className="text-sm text-red-400 glass-subtle rounded-lg px-3 py-2 border-red-500/20">{error}</div>}
+
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={isSubmitting} onClick={() => submitDecision("approve")} className="bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/25 hover:border-emerald-500/40">Approve</Button>
+              <Button
+                disabled={isSubmitting}
+                variant="secondary"
+                onClick={() => submitDecision("approve_redacted")}
+                className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/25 hover:border-amber-500/40"
+              >
+                Approve Redacted
+              </Button>
+              <Button
+                disabled={isSubmitting}
+                variant="outline"
+                onClick={() => submitDecision("deny")}
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-300 border-red-500/25 hover:border-red-500/40"
+              >
+                Deny
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl glass-subtle p-6 text-center">
+            <ShieldCheck className="w-8 h-8 text-emerald-400/50 mx-auto mb-2" />
+            <p className="text-sm text-slate-400">No pending consent requests.</p>
+          </div>
+        )}
+
+        <div className="mt-6 pt-5 border-t border-white/[0.06]">
+          <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+            Recent Decisions
+          </h3>
+          <div className="max-h-48 overflow-auto rounded-xl glass-subtle">
+            {receipts.length === 0 ? (
+              <div className="p-4 text-sm text-slate-500 text-center">No receipts yet.</div>
+            ) : (
+              receipts.map((receipt) => (
+                <div
+                  key={receipt.receipt_id}
+                  className="p-3.5 border-b border-white/[0.04] last:border-b-0 text-sm hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`badge text-xs ${receipt.user_decision === 'deny' ? 'badge-danger' : receipt.user_decision === 'approve_redacted' ? 'badge-warning' : 'badge-success'}`}>
+                      {receipt.user_decision}
+                    </span>
+                    <span className="text-xs text-slate-500">{new Date(receipt.timestamp).toLocaleString()}</span>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1.5 flex items-center justify-between">
+                    <span>{receipt.provider} · {receipt.memory_id.slice(0, 12)}…</span>
+                    <button
+                      type="button"
+                      className="text-xs text-slate-500 hover:text-violet-300 transition-colors"
+                      onClick={() => copyReceiptId(receipt.receipt_id)}
+                    >
+                      {copiedReceipt === receipt.receipt_id ? "✓ Copied" : "Copy ID"}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null;
+
   return (
     <>
       <Button
@@ -152,107 +265,7 @@ export function ConsentCenter() {
           </span>
         )}
       </Button>
-
-      {isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl glass-card rounded-2xl p-6 animate-fade-in">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
-                  <ShieldCheck className="w-4.5 h-4.5 text-violet-400" />
-                </div>
-                <h2 className="text-lg font-semibold text-slate-100">Consent Notifications</h2>
-              </div>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="p-2 rounded-lg hover:bg-white/[0.06] text-slate-400 hover:text-white transition-all duration-200"
-                aria-label="Close consent modal"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {nextPending ? (
-              <div className="space-y-4">
-                <div className="rounded-xl glass-subtle p-4">
-                  <div className="flex items-center gap-3 text-sm text-slate-400 mb-3 flex-wrap">
-                    <span className="badge badge-neutral">
-                      <ShieldCheck className="w-3 h-3 mr-1.5" />
-                      {nextPending.rule_triggered}
-                    </span>
-                    <span className="badge badge-primary">{nextPending.provider}</span>
-                    <span className="badge badge-warning">L{nextPending.sensitivity}</span>
-                  </div>
-                  <p className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">{nextPending.memory_text}</p>
-                </div>
-
-                {error && <div className="text-sm text-red-400 glass-subtle rounded-lg px-3 py-2 border-red-500/20">{error}</div>}
-
-                <div className="flex flex-wrap gap-2">
-                  <Button disabled={isSubmitting} onClick={() => submitDecision("approve")} className="bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/25 hover:border-emerald-500/40">Approve</Button>
-                  <Button
-                    disabled={isSubmitting}
-                    variant="secondary"
-                    onClick={() => submitDecision("approve_redacted")}
-                    className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/25 hover:border-amber-500/40"
-                  >
-                    Approve Redacted
-                  </Button>
-                  <Button
-                    disabled={isSubmitting}
-                    variant="outline"
-                    onClick={() => submitDecision("deny")}
-                    className="bg-red-500/10 hover:bg-red-500/20 text-red-300 border-red-500/25 hover:border-red-500/40"
-                  >
-                    Deny
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl glass-subtle p-6 text-center">
-                <ShieldCheck className="w-8 h-8 text-emerald-400/50 mx-auto mb-2" />
-                <p className="text-sm text-slate-400">No pending consent requests.</p>
-              </div>
-            )}
-
-            <div className="mt-6 pt-5 border-t border-white/[0.06]">
-              <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
-                Recent Decisions
-              </h3>
-              <div className="max-h-48 overflow-auto rounded-xl glass-subtle">
-                {receipts.length === 0 ? (
-                  <div className="p-4 text-sm text-slate-500 text-center">No receipts yet.</div>
-                ) : (
-                  receipts.map((receipt) => (
-                    <div
-                      key={receipt.receipt_id}
-                      className="p-3.5 border-b border-white/[0.04] last:border-b-0 text-sm hover:bg-white/[0.02] transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`badge text-xs ${receipt.user_decision === 'deny' ? 'badge-danger' : receipt.user_decision === 'approve_redacted' ? 'badge-warning' : 'badge-success'}`}>
-                          {receipt.user_decision}
-                        </span>
-                        <span className="text-xs text-slate-500">{new Date(receipt.timestamp).toLocaleString()}</span>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1.5 flex items-center justify-between">
-                        <span>{receipt.provider} · {receipt.memory_id.slice(0, 12)}…</span>
-                        <button
-                          type="button"
-                          className="text-xs text-slate-500 hover:text-violet-300 transition-colors"
-                          onClick={() => copyReceiptId(receipt.receipt_id)}
-                        >
-                          {copiedReceipt === receipt.receipt_id ? "✓ Copied" : "Copy ID"}
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {modal}
     </>
   );
 }

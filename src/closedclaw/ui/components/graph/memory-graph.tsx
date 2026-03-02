@@ -442,6 +442,40 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
         selectedNodeId={selectedNode?.id || null}
       />
 
+      {/* Hover Tooltip */}
+      {hoveredNode && (() => {
+        const node = nodes.find((n) => n.id === hoveredNode);
+        if (!node || !node.data?.memory) return null;
+        const screenX = node.x * zoom + panX;
+        const screenY = node.y * zoom + panY;
+        const tooltipText = node.data.memory.length > 120
+          ? node.data.memory.slice(0, 120) + "..."
+          : node.data.memory;
+        return (
+          <div
+            className="absolute z-30 pointer-events-none"
+            style={{
+              left: screenX,
+              top: screenY - (node.size * zoom) - 12,
+              transform: "translate(-50%, -100%)",
+            }}
+          >
+            <div className="max-w-xs px-3 py-2 bg-zinc-900/95 backdrop-blur-md border border-zinc-700/60 rounded-lg shadow-xl">
+              <p className="text-xs text-zinc-200 leading-relaxed">{tooltipText}</p>
+              {node.data.categories && node.data.categories.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {node.data.categories.slice(0, 3).map((cat) => (
+                    <span key={cat} className="px-1.5 py-0.5 bg-zinc-800 rounded text-[10px] text-zinc-400">
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Node Detail Panel */}
       <NodeDetailPanel
         node={selectedNode}

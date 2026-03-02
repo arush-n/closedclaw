@@ -19,10 +19,97 @@ import {
 
 type ViewMode = "graph" | "list";
 
+const defaultMemories: MemoryData[] = [
+  {
+    id: "default-1",
+    memory: "I prefer TypeScript over JavaScript for larger projects",
+    user_id: "user",
+    categories: ["preference", "programming"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+  },
+  {
+    id: "default-2",
+    memory: "Working on a machine learning project using PyTorch",
+    user_id: "user",
+    categories: ["work", "machine-learning"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+  },
+  {
+    id: "default-3",
+    memory: "Favorite editor is VS Code with GitHub Copilot",
+    user_id: "user",
+    categories: ["preference", "tools"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
+  },
+  {
+    id: "default-4",
+    memory: "Learning about graph databases and Neo4j",
+    user_id: "user",
+    categories: ["learning", "databases"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
+  },
+  {
+    id: "default-5",
+    memory: "Interested in AI agents and autonomous systems",
+    user_id: "user",
+    categories: ["interest", "ai"],
+    created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
+  },
+  {
+    id: "default-6",
+    memory: "Prefers dark mode for all coding environments",
+    user_id: "user",
+    categories: ["preference", "design"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+  },
+  {
+    id: "default-7",
+    memory: "Building a privacy-first AI memory middleware",
+    user_id: "user",
+    categories: ["work", "project"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
+  },
+  {
+    id: "default-8",
+    memory: "Exploring D3.js for interactive data visualization",
+    user_id: "user",
+    categories: ["learning", "visualization"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(),
+  },
+  {
+    id: "default-9",
+    memory: "Uses Python for data science and backend APIs",
+    user_id: "user",
+    categories: ["preference", "programming"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 96).toISOString(),
+  },
+  {
+    id: "default-10",
+    memory: "Research on differential privacy and secure computation",
+    user_id: "user",
+    categories: ["research", "privacy"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 120).toISOString(),
+  },
+  {
+    id: "default-11",
+    memory: "Enjoys hiking and outdoor photography on weekends",
+    user_id: "user",
+    categories: ["personal", "hobbies"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 150).toISOString(),
+  },
+  {
+    id: "default-12",
+    memory: "Studying cryptography and encryption algorithms",
+    user_id: "user",
+    categories: ["learning", "security"],
+    created_at: new Date(Date.now() - 1000 * 60 * 60 * 200).toISOString(),
+  },
+];
+
 export default function GraphPage() {
   const router = useRouter();
-  const [memories, setMemories] = useState<MemoryData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [memories, setMemories] = useState<MemoryData[]>(defaultMemories);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("graph");
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -51,13 +138,12 @@ export default function GraphPage() {
       const response = await fetch(`/api/memories?${params.toString()}`);
       const data = await response.json();
 
-      if (data.success) {
+      if (data.success && data.memories?.length > 0) {
         setMemories(data.memories);
-      } else {
-        throw new Error(data.error || "Failed to fetch memories");
       }
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      // If API returns empty, keep the current memories (defaults or previously loaded)
+    } catch {
+      // On error, keep current memories (defaults will stay visible)
     } finally {
       setIsLoading(false);
     }

@@ -130,6 +130,9 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         if (nodeId !== currentHoveredNode.current) {
           currentHoveredNode.current = nodeId;
           onNodeHover(nodeId);
+          if (canvasRef.current) {
+            canvasRef.current.style.cursor = nodeId ? "pointer" : "";
+          }
         }
 
         onPanMove(e);
