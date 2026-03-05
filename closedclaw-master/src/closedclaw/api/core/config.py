@@ -51,7 +51,12 @@ class LocalEngineSettings(BaseSettings):
     # Default to llama3.2-3b-q4 (3B params, 4-bit quant) for universal compatibility
     llm_model: str = Field(
         default="llama3.2-3b-q4",
-        description="Local LLM model key (see local.py for options)"
+        description="Local LLM model key for heavy tasks (chat, agentic reasoning)"
+    )
+    # Fast model for lightweight tasks (PII detection, classification, insights)
+    fast_model: str = Field(
+        default="",
+        description="Small fast model for lightweight tasks. Empty = use llm_model for everything."
     )
     llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     llm_max_tokens: int = Field(default=2000, ge=1, le=32768)
@@ -91,6 +96,30 @@ class LocalEngineSettings(BaseSettings):
         default=True,
         description="Automatically pull models if not installed"
     )
+
+    def get_fast_ollama_model(self) -> str:
+        """Resolve the Ollama model name for the fast (lightweight) tier.
+
+        Returns the fast_model if set, otherwise falls back to llm_model.
+        Handles both LOCAL_MODELS keys and raw Ollama model names.
+        """
+        from closedclaw.api.core.local import LOCAL_MODELS
+
+        key = self.fast_model.strip() if self.fast_model else ""
+        if not key:
+            key = self.llm_model
+        if key in LOCAL_MODELS:
+            return LOCAL_MODELS[key].ollama_model
+        return key
+
+    def get_full_ollama_model(self) -> str:
+        """Resolve the Ollama model name for the full (heavy) tier."""
+        from closedclaw.api.core.local import LOCAL_MODELS
+
+        key = self.llm_model
+        if key in LOCAL_MODELS:
+            return LOCAL_MODELS[key].ollama_model
+        return key
 
 
 class Settings(BaseSettings):
@@ -415,6 +444,7 @@ def init_local_engine(settings: Optional[Settings] = None, fast_startup: bool = 
         "hardware_profile": None,
         "embedding_model": settings.local_engine.embedding_model,
         "llm_model": settings.local_engine.llm_model,
+        "fast_model": settings.local_engine.fast_model or settings.local_engine.llm_model,
     }
     
     if not status["ollama_installed"]:
@@ -453,6 +483,16 @@ def init_local_engine(settings: Optional[Settings] = None, fast_startup: bool = 
         if llm_model_key in LOCAL_MODELS:
             model_name = LOCAL_MODELS[llm_model_key].ollama_model
             if not _has_model(installed_models, model_name) and manager.ensure_model(model_name, installed_models):
+                updated = True
+
+        # Ensure fast model is available (if configured separately)
+        fast_model_key = (settings.local_engine.fast_model or "").strip()
+        if fast_model_key and fast_model_key != llm_model_key:
+            if fast_model_key in LOCAL_MODELS:
+                fast_name = LOCAL_MODELS[fast_model_key].ollama_model
+            else:
+                fast_name = fast_model_key
+            if not _has_model(installed_models, fast_name) and manager.ensure_model(fast_name, installed_models):
                 updated = True
         
         # Ensure embedding model is available

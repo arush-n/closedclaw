@@ -84,7 +84,8 @@ services:
       # Ollama inside Docker
       - CLOSEDCLAW_OLLAMA_BASE_URL=http://ollama:11434
       - CLOSEDCLAW_LOCAL_ENGINE_ENABLED=true
-      - CLOSEDCLAW_LOCAL_ENGINE_LLM_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      - CLOSEDCLAW_LOCAL_ENGINE_LLM_MODEL=${OLLAMA_MODEL:-qwen3:4b}
+      - CLOSEDCLAW_LOCAL_FAST_MODEL=${OLLAMA_FAST_MODEL:-qwen3:1.7b}
       # Provider config — use ollama for local-only operation
       - CLOSEDCLAW_PROVIDER=${CLOSEDCLAW_PROVIDER:-ollama}
       - CLOSEDCLAW_DEFAULT_MODEL=${CLOSEDCLAW_DEFAULT_MODEL:-}
@@ -95,6 +96,7 @@ services:
     volumes:
       - ./config:/config:ro
       - closedclaw_data:/data
+      - closedclaw_auth:/root/.closedclaw
     networks:
       - closedclaw-net
     ports:
@@ -127,7 +129,7 @@ services:
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
       # LLM and embedding config — defaults to Ollama (local)
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      - LLM_MODEL=${LLM_MODEL:-llama3.2:3b}
+      - LLM_MODEL=${LLM_MODEL:-qwen3:4b}
       - LLM_OLLAMA_BASE_URL=http://ollama:11434
       - EMBEDDER_PROVIDER=${EMBEDDER_PROVIDER:-ollama}
       - EMBEDDER_MODEL=${EMBEDDER_MODEL:-nomic-embed-text}
@@ -233,6 +235,8 @@ services:
       - MEM0_API_URL=http://closedclaw-server:8765
       - NEXT_PUBLIC_API_URL=http://localhost:${CLOSEDCLAW_DASHBOARD_PORT:-3001}/closedclaw-api
       - OPENMEMORY_API_URL=http://openmemory-mcp:8765
+    volumes:
+      - closedclaw_auth:/root/.closedclaw:ro
     ports:
       - "${CLOSEDCLAW_DASHBOARD_PORT:-3001}:3001"
     depends_on:
@@ -271,3 +275,5 @@ volumes:
     name: closedclaw-server-data
   ollama_data:
     name: closedclaw-ollama-data
+  closedclaw_auth:
+    name: closedclaw-auth-data

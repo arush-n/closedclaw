@@ -188,13 +188,8 @@ class InsightEngine:
         return self._llm
 
     def _get_model_name(self) -> str:
-        """Get the configured Ollama model name."""
-        from closedclaw.api.core.local import LOCAL_MODELS
-
-        model_key = self.settings.local_engine.llm_model
-        if model_key in LOCAL_MODELS:
-            return LOCAL_MODELS[model_key].ollama_model
-        return model_key
+        """Get the fast-tier Ollama model for insights (lightweight analysis)."""
+        return self.settings.local_engine.get_fast_ollama_model()
 
     def _llm_generate(
         self,

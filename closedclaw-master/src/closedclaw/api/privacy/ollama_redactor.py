@@ -42,10 +42,18 @@ class OllamaRedactionEngine:
 
     def __init__(
         self,
-        model: str = "llama3.2:3b",
+        model: Optional[str] = None,
         base_url: Optional[str] = None,
         timeout: float = 15.0,
     ):
+        if model is None:
+            # Use the fast model tier for PII detection (lightweight task)
+            try:
+                from closedclaw.api.core.config import get_settings
+                settings = get_settings()
+                model = settings.local_engine.get_fast_ollama_model()
+            except Exception:
+                model = "llama3.2:3b"
         self.model = model
         self.base_url = base_url or os.getenv(
             "CLOSEDCLAW_OLLAMA_BASE_URL", "http://localhost:11434"
