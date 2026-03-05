@@ -3,156 +3,298 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Openclaw</title>
+  <title>Closedclaw</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      width: 340px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #fafafa;
-      color: #1a1a1a;
-      font-size: 14px;
+    
+    :root {
+      --primary: #6366f1;
+      --primary-dark: #4f46e5;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #ffffff;
+      --bg-secondary: #f9fafb;
+      --border: #e5e7eb;
+      --text: #111827;
+      --text-secondary: #6b7280;
+      --text-tertiary: #9ca3af;
     }
+    
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px;
-      border-bottom: 1px solid #e5e5e5;
+      padding: 20px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+      border-bottom: 1px solid var(--border);
     }
-    .header h1 {
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
       font-size: 18px;
-      font-weight: 600;
     }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
     .toggle {
       position: relative;
-      width: 44px;
-      height: 24px;
+      width: 48px;
+      height: 26px;
     }
     .toggle input { opacity: 0; width: 0; height: 0; }
     .toggle .slider {
       position: absolute;
       inset: 0;
-      background: #ccc;
-      border-radius: 24px;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 13px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: background 0.3s ease;
     }
     .toggle .slider::before {
       content: '';
       position: absolute;
-      width: 18px; height: 18px;
-      left: 3px; bottom: 3px;
+      width: 20px; height: 20px;
+      left: 3px; top: 3px;
       background: #fff;
       border-radius: 50%;
-      transition: transform 0.2s;
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
-    .toggle input:checked + .slider { background: #2563eb; }
-    .toggle input:checked + .slider::before { transform: translateX(20px); }
+    .toggle input:checked + .slider { background: rgba(255, 255, 255, 0.4); }
+    .toggle input:checked + .slider::before { transform: translateX(22px); }
 
     .status {
-      padding: 12px 16px;
+      padding: 12px 20px;
+      background: var(--bg-secondary);
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       font-size: 13px;
-      color: #666;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
     }
-    .dot {
-      width: 8px; height: 8px;
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
-      background: #ccc;
+      background: var(--text-tertiary);
+      animation: pulse 2s infinite;
     }
-    .dot.connected { background: #22c55e; }
-    .dot.disconnected { background: #ef4444; }
+
+    .status-dot.connected {
+      background: var(--success);
+      animation: none;
+    }
+
+    .status-dot.disconnected {
+      background: var(--danger);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .status-text {
+      font-weight: 500;
+      color: var(--text);
+    }
 
     .section {
-      padding: 12px 16px;
-      border-top: 1px solid #e5e5e5;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
     }
+
     .section h2 {
-      font-size: 13px;
-      font-weight: 600;
-      color: #888;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 8px;
+      letter-spacing: 0.8px;
+      margin-bottom: 12px;
     }
 
     .memory-search {
       display: flex;
       gap: 8px;
     }
+
     .memory-search input {
       flex: 1;
-      padding: 8px 12px;
-      border: 1px solid #ddd;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
       border-radius: 8px;
       font-size: 13px;
+      color: var(--text);
       outline: none;
+      transition: all 0.2s ease;
+      background: var(--bg);
     }
-    .memory-search input:focus { border-color: #2563eb; }
+
+    .memory-search input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .memory-search input::placeholder {
+      color: var(--text-tertiary);
+    }
+
     .memory-search button {
-      padding: 8px 14px;
-      background: #2563eb;
-      color: #fff;
+      padding: 10px 16px;
+      background: var(--primary);
+      color: white;
       border: none;
       border-radius: 8px;
       font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .memory-search button:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .memory-search button:active {
+      transform: translateY(0);
     }
 
     .results {
-      margin-top: 8px;
+      margin-top: 10px;
       max-height: 200px;
       overflow-y: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
     }
+
     .result-item {
-      padding: 8px;
-      background: #fff;
-      border: 1px solid #eee;
-      border-radius: 6px;
-      margin-bottom: 4px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
       font-size: 12px;
-      color: #444;
-      line-height: 1.4;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .result-item:last-child {
+      border-bottom: none;
+    }
+
+    .result-item:hover {
+      background: #f3f4f6;
     }
 
     .stats {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      gap: 10px;
     }
+
     .stat {
-      background: #fff;
-      border: 1px solid #eee;
-      border-radius: 8px;
-      padding: 10px;
+      background: linear-gradient(135deg, #f0f9ff 0%, #f0f4ff 100%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
       text-align: center;
+      transition: all 0.2s ease;
     }
-    .stat .value {
-      font-size: 20px;
-      font-weight: 600;
-      color: #2563eb;
+
+    .stat:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     }
-    .stat .label {
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
       font-size: 11px;
-      color: #888;
-      margin-top: 2px;
+      color: var(--text-secondary);
+      font-weight: 500;
     }
 
     .footer {
-      padding: 12px 16px;
-      border-top: 1px solid #e5e5e5;
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
       text-align: center;
       font-size: 11px;
-      color: #aaa;
+      color: var(--text-tertiary);
+      background: var(--bg-secondary);
+    }
+
+    .footer-text {
+      margin: 0;
+      font-weight: 500;
+    }
+
+    .footer-subtitle {
+      font-size: 10px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+    }
+
+    /* Scrollbar styling */
+    .results::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .results::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .results::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .results::-webkit-scrollbar-thumb:hover {
+      background: var(--text-tertiary);
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>Openclaw</h1>
+    <div class="header-left">
+      <div class="logo">◈</div>
+      <h1>Closedclaw</h1>
+    </div>
     <label class="toggle">
       <input type="checkbox" id="enableToggle" checked />
       <span class="slider"></span>
@@ -160,35 +302,36 @@
   </div>
 
   <div class="status" id="statusBar">
-    <span class="dot" id="statusDot"></span>
-    <span id="statusText">Connecting...</span>
+    <span class="status-dot" id="statusDot"></span>
+    <span class="status-text" id="statusText">Connecting...</span>
   </div>
 
   <div class="section">
     <h2>Memory Search</h2>
     <div class="memory-search">
-      <input type="text" id="searchInput" placeholder="Search your memories..." />
+      <input type="text" id="searchInput" placeholder="Search memories..." />
       <button id="searchBtn">Search</button>
     </div>
     <div class="results" id="searchResults"></div>
   </div>
 
   <div class="section">
-    <h2>Session</h2>
+    <h2>Session Stats</h2>
     <div class="stats" id="statsGrid">
       <div class="stat">
-        <div class="value" id="rulesCount">-</div>
-        <div class="label">Active Rules</div>
+        <div class="stat-value" id="rulesCount">-</div>
+        <div class="stat-label">Active Rules</div>
       </div>
       <div class="stat">
-        <div class="value" id="agentsCount">-</div>
-        <div class="label">Agents</div>
+        <div class="stat-value" id="agentsCount">-</div>
+        <div class="stat-label">Agents</div>
       </div>
     </div>
   </div>
 
   <div class="footer">
-    Openclaw v0.1.0 &middot; Privacy-first AI memory
+    <p class="footer-text">Closedclaw v0.1.0</p>
+    <p class="footer-subtitle">Your Memory, Your Rules, Your Machine</p>
   </div>
 
   <script src="popup.js" type="module"></script>
