@@ -18,6 +18,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
+import httpx
 
 from closedclaw.api.core.addon_auth import AddonSession, get_addon_session_manager
 from closedclaw.api.core.config import Settings, get_settings
@@ -239,7 +240,11 @@ async def addon_memory_capture(
     session: AddonSession = Depends(require_addon_session),
     settings: Settings = Depends(get_settings),
 ):
-    """Capture a new memory from the browser addon."""
+    """Capture a new memory from the browser addon.
+
+    Stores into the local mem0 Qdrant instance (shared with openclaw)
+    and notifies the Docker bridge so openclaw can index it.
+    """
     from closedclaw.api.core.memory import get_memory_instance
 
     try:
@@ -253,9 +258,34 @@ async def addon_memory_capture(
             tags=req.tags + ["source:addon"],
             source=req.source,
         )
+
+        # Notify Docker bridge so openclaw picks up the memory
+        await _notify_bridge_memory(req.content, req.user_id, req.sensitivity)
+
         return {"status": "stored", "content_length": len(req.content)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Memory capture failed: {exc}")
+
+
+async def _notify_bridge_memory(content: str, user_id: str, sensitivity: int) -> None:
+    """Best-effort notification to Docker bridge about new addon memory."""
+    import os
+    bridge_url = os.environ.get("CLOSEDCLAW_BRIDGE_URL", "")
+    if not bridge_url:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{bridge_url}/memory/sync",
+                json={
+                    "user_id": user_id,
+                    "source": "addon",
+                    "sensitivity": sensitivity,
+                    "content_length": len(content),
+                },
+            )
+    except Exception:
+        pass  # Best-effort — don't break capture if bridge is down
 
 
 @router.get("/addon/memory/query")

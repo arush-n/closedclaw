@@ -129,6 +129,9 @@ def _build_mem0_config(settings: Settings) -> dict[str, Any]:
         settings.embedding_model,
         settings.local_model,
         settings.ollama_base_url,
+        settings.qdrant_host,
+        settings.qdrant_port,
+        settings.qdrant_collection,
     )
     with _mem0_cache_lock:
         if _mem0_config_cache_key == cache_key and _mem0_config_cache_value is not None:
@@ -159,6 +162,9 @@ def _build_mem0_config(settings: Settings) -> dict[str, Any]:
         config["vector_store"] = {
             "provider": "qdrant",
             "config": {
+                "host": settings.qdrant_host,
+                "port": settings.qdrant_port,
+                "collection_name": settings.qdrant_collection,
                 "embedding_model_dims": 1536,
             }
         }
@@ -180,6 +186,9 @@ def _build_mem0_config(settings: Settings) -> dict[str, Any]:
         config["vector_store"] = {
             "provider": "qdrant",
             "config": {
+                "host": settings.qdrant_host,
+                "port": settings.qdrant_port,
+                "collection_name": settings.qdrant_collection,
                 "embedding_model_dims": 768,
             }
         }

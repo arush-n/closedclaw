@@ -1,0 +1,362 @@
+# =============================================================================
+# Closedclaw Configuration
+# =============================================================================
+# This file controls the closedclaw governance system.
+# Copy to closedclaw.local.yaml to override without affecting git.
+# Environment variables with CLOSEDCLAW_ prefix override these values.
+# =============================================================================
+
+server:
+  host: "127.0.0.1"       # Host-only — never bind inside Docker
+  port: 8765
+  debug: false
+  log_level: "INFO"
+
+dashboard:
+  port: 3001
+  # The closedclaw dashboard is host-only, separate from openclaw's UI
+
+# --- LLM Provider ---
+provider: "openai"
+default_model: "gpt-4o-mini"
+embedding_model: "text-embedding-3-small"
+
+# Ollama (local engine) settings
+local_engine:
+  enabled: true
+  hardware_profile: "standard"
+  llm_model: "llama3.2-3b-q4"
+  embedding_model: "nomic-embed-text"
+  ollama_base_url: "http://localhost:11434"
+  auto_pull_models: true
+
+# --- Privacy & Security ---
+privacy:
+  default_sensitivity: 1        # 0=public, 1=normal, 2=sensitive, 3=critical
+  require_consent_level: 2      # Sensitivity level requiring explicit consent
+  local_only_level: 2           # Force local LLM for this sensitivity and above
+  enable_redaction: true         # PII redaction via Presidio
+  enable_encryption: true        # AES-256-GCM (always on, cannot be disabled)
+
+# --- Agent Swarm ---
+swarm:
+  enabled: true
+  max_agent_calls: 10
+  token_budget: 2000
+
+# --- Restricted App Access Policies ---
+# These define which external services openclaw CANNOT access directly.
+# All access is routed through closedclaw's controlled MCP proxy.
+restricted_apps:
+  # Each entry defines a restricted domain/service
+  gmail:
+    domains:
+      - "mail.google.com"
+      - "gmail.com"
+      - "*.gmail.com"
+      - "accounts.google.com"
+    categories: ["email", "personal"]
+    policy: "proxy_through_closedclaw"
+    consent_required: true
+    audit_level: "full"          # Log all access attempts
+    allowed_operations:
+      - "read_inbox_summary"     # Can get summaries
+      - "search_emails"          # Can search (with PII redaction)
+    blocked_operations:
+      - "send_email"             # Cannot send emails
+      - "delete_email"           # Cannot delete
+      - "modify_labels"          # Cannot modify organization
+    rate_limit:
+      max_requests_per_hour: 20
+      max_requests_per_day: 100
+
+  banking:
+    domains:
+      - "*.chase.com"
+      - "*.bankofamerica.com"
+      - "*.wellsfargo.com"
+      - "*.citi.com"
+      - "*.capitalone.com"
+      - "*.schwab.com"
+      - "*.fidelity.com"
+      - "*.vanguard.com"
+      - "*.paypal.com"
+      - "*.venmo.com"
+    categories: ["financial", "banking", "critical"]
+    policy: "block_all"          # No access whatsoever
+    consent_required: true
+    audit_level: "full"
+    allowed_operations: []       # Nothing allowed
+    blocked_operations: ["*"]    # Everything blocked
+    alert_on_attempt: true       # Alert user on any access attempt
+
+  social_media:
+    domains:
+      - "*.facebook.com"
+      - "*.twitter.com"
+      - "*.x.com"
+      - "*.instagram.com"
+      - "*.linkedin.com"
+      - "*.tiktok.com"
+    categories: ["social", "personal"]
+    policy: "proxy_through_closedclaw"
+    consent_required: true
+    audit_level: "standard"
+    allowed_operations:
+      - "read_profile"
+      - "read_messages_summary"
+    blocked_operations:
+      - "post_content"
+      - "send_message"
+      - "modify_profile"
+    rate_limit:
+      max_requests_per_hour: 10
+      max_requests_per_day: 50
+
+  cloud_storage:
+    domains:
+      - "drive.google.com"
+      - "*.dropbox.com"
+      - "*.onedrive.com"
+      - "*.icloud.com"
+    categories: ["storage", "personal"]
+    policy: "proxy_through_closedclaw"
+    consent_required: true
+    audit_level: "standard"
+    allowed_operations:
+      - "list_files"
+      - "read_file_metadata"
+    blocked_operations:
+      - "delete_file"
+      - "upload_file"
+      - "share_file"
+
+  healthcare:
+    domains:
+      - "*.mychart.com"
+      - "*.healthvault.com"
+      - "*.portal.health"
+    categories: ["health", "hipaa", "critical"]
+    policy: "block_all"
+    consent_required: true
+    audit_level: "full"
+    allowed_operations: []
+    blocked_operations: ["*"]
+    alert_on_attempt: true
+
+# --- Memory Safety Rules ---
+# These control how openclaw's memory writes are monitored and filtered.
+memory_guardian:
+  enabled: true
+  
+  # Patterns that trigger automatic restriction of memories
+  dangerous_patterns:
+    credentials:
+      patterns:
+        - "password[s]?\\s*[:=]"
+        - "api[_-]?key[s]?\\s*[:=]"
+        - "secret[_-]?key\\s*[:=]"
+        - "access[_-]?token\\s*[:=]"
+        - "bearer\\s+[A-Za-z0-9\\-._~+/]+"
+        - "ssh-rsa\\s+"
+        - "-----BEGIN (RSA |EC )?PRIVATE KEY-----"
+        - "-----BEGIN CERTIFICATE-----"
+      action: "block"
+      severity: "critical"
+      notify_user: true
+
+    financial:
+      patterns:
+        - "\\b\\d{4}[- ]?\\d{4}[- ]?\\d{4}[- ]?\\d{4}\\b"   # Credit cards
+        - "\\b\\d{3}[- ]?\\d{2}[- ]?\\d{4}\\b"               # SSN
+        - "\\brouting[\\s_-]?number\\s*[:=]"
+        - "\\baccount[\\s_-]?number\\s*[:=]"
+        - "\\biban\\s*[:=]"
+        - "\\bswift\\s*[:=]"
+      action: "block"
+      severity: "critical"
+      notify_user: true
+
+    personal_identifiers:
+      patterns:
+        - "\\bdate[\\s_-]?of[\\s_-]?birth\\s*[:=]"
+        - "\\bdob\\s*[:=]"
+        - "\\bdriver'?s?[\\s_-]?license\\s*[:=]"
+        - "\\bpassport[\\s_-]?number\\s*[:=]"
+        - "\\bmedical[\\s_-]?record\\s*[:=]"
+      action: "redact_and_store"    # Redact PII but keep the memory
+      severity: "high"
+      notify_user: true
+
+    harmful_content:
+      patterns:
+        - "(?i)(how to|instructions for)\\s+(hack|exploit|attack|bypass)"
+        - "(?i)malware|ransomware|keylogger|trojan"
+        - "(?i)(create|build|make)\\s+(bomb|weapon|explosive)"
+      action: "block"
+      severity: "critical"
+      notify_user: true
+      log_to_audit: true
+
+  # Categories that are auto-classified as sensitive
+  sensitive_categories:
+    - "medical"
+    - "financial"
+    - "legal"
+    - "authentication"
+    - "personal_identity"
+    - "relationships"
+  
+  # Memory retention policies
+  retention:
+    session_memories_ttl_hours: 24      # Session memories expire after 24h
+    sensitive_memories_ttl_days: 30     # Sensitive memories expire after 30 days
+    critical_memories_ttl_days: 7       # Critical memories expire after 7 days
+    max_memories_per_user: 10000        # Hard limit on total memories
+    auto_deduplicate: true              # Remove duplicate memories
+    dedup_similarity_threshold: 0.92    # Cosine similarity threshold for dedup
+
+# --- Controlled MCP Services ---
+# These are closedclaw-hosted MCP endpoints that replace direct access.
+# Openclaw accesses these INSTEAD of going to real services.
+controlled_mcps:
+  email_mcp:
+    name: "Controlled Email Access"
+    description: "Read-only email summaries with PII redaction"
+    endpoint: "http://host.docker.internal:8765/v1/mcp/email"
+    operations:
+      - name: "get_inbox_summary"
+        description: "Get a summary of recent emails (subjects, senders, dates only)"
+        redact_fields: ["body", "attachments", "cc", "bcc"]
+      - name: "search_emails"
+        description: "Search emails by keyword (returns summaries only)"
+        redact_fields: ["body", "attachments"]
+    requires_consent: true
+    audit_all: true
+
+  calendar_mcp:
+    name: "Controlled Calendar Access"
+    description: "Read-only calendar with location redaction"
+    endpoint: "http://host.docker.internal:8765/v1/mcp/calendar"
+    operations:
+      - name: "get_upcoming_events"
+        description: "List upcoming calendar events"
+        redact_fields: ["location", "attendees_emails", "conference_link"]
+      - name: "search_events"
+        description: "Search calendar events"
+        redact_fields: ["location", "attendees_emails"]
+    requires_consent: true
+    audit_all: true
+
+  file_mcp:
+    name: "Controlled File Access"
+    description: "Read-only file listing (no content access)"
+    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/files"
+    operations:
+      - name: "list_files"
+        description: "List file names and sizes (no content)"
+        redact_fields: ["content", "preview"]
+    requires_consent: true
+    audit_all: true
+
+  gmail_mcp:
+    name: "Controlled Gmail Access"
+    description: "Gmail access via closedclaw governance pipeline"
+    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/gmail"
+    operations:
+      - name: "get_inbox_summary"
+        description: "Recent inbox subjects and senders (no bodies)"
+        redact_fields: ["body", "attachments"]
+      - name: "search_emails"
+        description: "Search emails by query"
+        redact_fields: ["body", "attachments"]
+      - name: "get_email"
+        description: "Get a single email (PII-redacted body)"
+        redact_fields: ["attachments"]
+      - name: "get_labels"
+        description: "List Gmail labels"
+    requires_consent: true
+    audit_all: true
+
+  notion_mcp:
+    name: "Controlled Notion Access"
+    description: "Notion workspace access via closedclaw governance"
+    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/notion"
+    operations:
+      - name: "search_pages"
+        description: "Search pages and databases"
+      - name: "get_page"
+        description: "Get page content (PII-redacted)"
+      - name: "list_databases"
+        description: "List accessible databases"
+      - name: "query_database"
+        description: "Query a database with filters"
+    requires_consent: true
+    audit_all: true
+
+  drive_mcp:
+    name: "Controlled Drive Access"
+    description: "Google Drive access via closedclaw governance"
+    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/drive"
+    operations:
+      - name: "list_files"
+        description: "List files in a folder"
+      - name: "search_files"
+        description: "Search files by name"
+      - name: "get_file_metadata"
+        description: "Get file metadata"
+      - name: "get_file_content"
+        description: "Get text file content (PII-redacted)"
+    requires_consent: true
+    audit_all: true
+
+  slack_mcp:
+    name: "Controlled Slack Access"
+    description: "Slack workspace access via closedclaw governance"
+    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/slack"
+    operations:
+      - name: "list_channels"
+        description: "List channels"
+      - name: "search_messages"
+        description: "Search messages by query"
+      - name: "get_channel_history"
+        description: "Recent messages in a channel"
+      - name: "get_user_info"
+        description: "Get user profile info"
+    requires_consent: true
+    audit_all: true
+
+  github_mcp:
+    name: "Controlled GitHub Access"
+    description: "GitHub repo access via closedclaw governance"
+    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/github"
+    operations:
+      - name: "list_repos"
+        description: "List user repositories"
+      - name: "get_repo"
+        description: "Get repository details"
+      - name: "list_issues"
+        description: "List issues for a repo"
+      - name: "list_pull_requests"
+        description: "List PRs for a repo"
+      - name: "get_file_content"
+        description: "Get file content (PII-redacted)"
+    requires_consent: true
+    audit_all: true
+
+# --- Bridge Configuration ---
+# Controls how closedclaw connects to the Docker environment
+bridge:
+  # The bridge runs INSIDE Docker and communicates with closedclaw on the host
+  port: 9000
+  closedclaw_host_url: "http://host.docker.internal:8765"
+  openclaw_internal_url: "http://openmemory-mcp:8766"
+  
+  # Health check interval (seconds)
+  health_check_interval: 30
+  
+  # Maximum concurrent proxied requests
+  max_concurrent_requests: 10
+  
+  # Request timeout (seconds)
+  request_timeout: 30

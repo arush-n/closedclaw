@@ -74,6 +74,11 @@ TASK_PIPELINES: Dict[SwarmTaskType, List[str]] = {
         "sentinel",       # 6. Hallucination check (conditional: sensitivity >= 2)
         "auditor",        # 7. Log the context injection
     ],
+    SwarmTaskType.TOOL_DISPATCH: [
+        "governance",          # 1. Policy evaluation for tool access
+        "tool_orchestrator",   # 2. Route to appropriate tool agent
+        "auditor",             # 3. Log the tool interaction
+    ],
 }
 
 # Agents that require high-sensitivity context to activate
@@ -164,6 +169,27 @@ class SwarmCoordinator:
         elif name == "processor":
             from closedclaw.api.agents.swarm.processor import ProcessorAgent
             return ProcessorAgent(**kwargs)
+        elif name == "memory_guardian":
+            from closedclaw.api.agents.swarm.memory_guardian import MemoryGuardianAgent
+            return MemoryGuardianAgent(**kwargs)
+        elif name == "tool_orchestrator":
+            from closedclaw.api.agents.swarm.tool_agents.tool_orchestrator import ToolOrchestratorAgent
+            return ToolOrchestratorAgent(**kwargs)
+        elif name == "gmail":
+            from closedclaw.api.agents.swarm.tool_agents.gmail_agent import GmailAgent
+            return GmailAgent(**kwargs)
+        elif name == "notion":
+            from closedclaw.api.agents.swarm.tool_agents.notion_agent import NotionAgent
+            return NotionAgent(**kwargs)
+        elif name == "drive":
+            from closedclaw.api.agents.swarm.tool_agents.drive_agent import DriveAgent
+            return DriveAgent(**kwargs)
+        elif name == "slack":
+            from closedclaw.api.agents.swarm.tool_agents.slack_agent import SlackAgent
+            return SlackAgent(**kwargs)
+        elif name == "github_tool":
+            from closedclaw.api.agents.swarm.tool_agents.github_agent import GitHubToolAgent
+            return GitHubToolAgent(**kwargs)
         else:
             raise ValueError(f"Unknown agent: {name}")
 

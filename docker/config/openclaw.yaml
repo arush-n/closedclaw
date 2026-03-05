@@ -1,0 +1,184 @@
+# =============================================================================
+# Openclaw (OpenMemory) Configuration
+# =============================================================================
+# This file controls the openclaw memory system running inside Docker.
+# Copy to openclaw.local.yaml to override without affecting git.
+# =============================================================================
+
+# --- Mode ---
+mode: "open-source"   # "platform" or "open-source"
+
+# --- Memory Behavior ---
+memory:
+  auto_capture: true          # ENFORCED: always capture memories after agent turns
+  auto_recall: true           # ENFORCED: always recall relevant memories before turns
+  search_threshold: 0.6       # Minimum similarity score for memory recall
+  top_k: 10                   # Number of memories to recall per query
+  
+  # Continuous context writing — keeps openclaw's context alive
+  continuous_context:
+    enabled: true
+    write_interval_seconds: 60    # Write context summary every 60s during active sessions
+    include_session_summary: true  # Include session summary in writes
+    include_tool_calls: true       # Log tool calls as memories
+    include_decisions: true        # Log decision rationale as memories
+    max_context_memories: 50       # Max context memories per session
+
+# --- LLM Configuration ---
+llm:
+  provider: "openai"
+  config:
+    model: "gpt-4o-mini"
+    temperature: 0.1
+    max_tokens: 2000
+
+# --- Embedder ---
+embedder:
+  provider: "openai"
+  config:
+    model: "text-embedding-3-small"
+
+# --- Vector Store ---
+vector_store:
+  provider: "qdrant"
+  config:
+    host: "mem0-store"
+    port: 6333
+    collection_name: "openclaw_memories"
+
+# --- User Identity ---
+user_id: "${USER_ID}"
+
+# --- Categories ---
+# Custom memory categories for classification
+custom_categories:
+  preferences: "User preferences, likes, dislikes, settings"
+  context: "Ongoing conversation context and session state"
+  facts: "Verified factual information about the user"
+  decisions: "Decisions made and their rationale"
+  tasks: "Tasks, todos, and action items"
+  relationships: "People and relationship information"
+  goals: "User goals, objectives, and aspirations"
+  restrictions: "Rules, restrictions, and constraints to follow"
+
+# --- Custom Instructions ---
+# These instructions are injected into every memory extraction prompt
+custom_instructions: |
+  You are operating under the closedclaw governance framework.
+  
+  MANDATORY RULES:
+  1. ALWAYS write memories for important context, decisions, and user preferences
+  2. NEVER store raw credentials, API keys, passwords, or financial account numbers
+  3. NEVER store exact credit card numbers, SSNs, or government IDs
+  4. When you encounter sensitive information, store only the FACT that it exists
+     (e.g., "User has a Chase bank account" NOT "User's Chase account number is XXX")
+  5. Always categorize memories appropriately
+  6. Flag any memory that contains medical, financial, or legal information as sensitive
+  7. Write session context summaries regularly to maintain continuity
+  8. When accessing restricted services (email, calendar, files), use ONLY the 
+     controlled MCP endpoints — never attempt direct access
+  9. If you need information from a restricted service, request it through the
+     closedclaw bridge — never try to bypass restrictions
+  10. Log all tool calls and their outcomes as memories for traceability
+
+# --- Graph Memory ---
+enable_graph: false   # Graph relationships (requires Neo4j)
+
+# --- MCP Bridge ---
+# How openclaw connects to closedclaw's controlled services
+bridge:
+  enabled: true
+  url: "http://control-bridge:9000"
+  
+  # These replace direct access to restricted services
+  mcp_endpoints:
+    email: "http://control-bridge:9000/mcp/email"
+    calendar: "http://control-bridge:9000/mcp/calendar"
+    files: "http://control-bridge:9000/mcp/files"
+    gmail: "http://control-bridge:9000/mcp/gmail"
+    notion: "http://control-bridge:9000/mcp/notion"
+    drive: "http://control-bridge:9000/mcp/drive"
+    slack: "http://control-bridge:9000/mcp/slack"
+    github: "http://control-bridge:9000/mcp/github"
+  
+  # Health check
+  health_check_url: "http://control-bridge:9000/health"
+
+# --- Tool Access Control ---
+# Granular permissions for what openclaw can do with each service
+tool_permissions:
+  gmail:
+    enabled: true
+    allowed_operations: ["get_inbox_summary", "search_emails", "get_email", "get_labels"]
+    # Set to true to also allow send_email (requires consent per-send)
+    allow_write: false
+    rate_limit_per_minute: 20
+  notion:
+    enabled: true
+    allowed_operations: ["search_pages", "get_page", "list_databases", "query_database"]
+    allow_write: false
+    rate_limit_per_minute: 15
+  drive:
+    enabled: true
+    allowed_operations: ["list_files", "search_files", "get_file_metadata", "get_file_content"]
+    allow_write: false
+    rate_limit_per_minute: 15
+  slack:
+    enabled: false
+    allowed_operations: ["list_channels", "search_messages", "get_channel_history"]
+    allow_write: false
+    rate_limit_per_minute: 15
+  github:
+    enabled: true
+    allowed_operations: ["list_repos", "get_repo", "list_issues", "list_pull_requests", "get_file_content"]
+    allow_write: false
+    rate_limit_per_minute: 20
+
+# --- Content Filters ---
+# Control what content openclaw is allowed to process
+content_filters:
+  # Block memories containing these keywords from being stored
+  blocked_keywords: []
+  # Only store memories matching these categories (empty = all allowed)
+  allowed_categories: []
+  # Maximum memory content length (characters)
+  max_memory_length: 5000
+  # Strip URLs from memory content before storing
+  strip_urls: false
+  # Redact email addresses in stored memories
+  redact_emails: true
+
+# --- Memory Retention ---
+# Control how long memories are kept
+retention:
+  # Default retention in days (0 = forever)
+  default_ttl_days: 0
+  # Retention by sensitivity level (overrides default)
+  sensitivity_ttl:
+    level_0: 0      # General — keep forever
+    level_1: 365    # Personal — 1 year
+    level_2: 90     # Sensitive — 90 days
+    level_3: 30     # Highly sensitive — 30 days
+  # Auto-compact duplicate/similar memories
+  auto_compact: true
+  compact_interval_hours: 24
+
+# --- Notification Preferences ---
+notifications:
+  # Notify user when consent is required for a tool operation
+  consent_prompt: true
+  # Notify on high-sensitivity memory captures
+  sensitivity_alerts: true
+  # Minimum sensitivity level to trigger alerts (0-3)
+  alert_threshold: 2
+  # Notify when a tool operation is blocked by policy
+  blocked_operation_alerts: true
+
+# --- Output Constraints ---
+output:
+  # Max tokens in memory recall responses
+  max_recall_tokens: 2000
+  # Include memory source attribution
+  include_attribution: true
+  # Include confidence scores in recall
+  include_confidence: true

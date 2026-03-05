@@ -160,6 +160,11 @@ class Settings(BaseSettings):
     vector_dimension: int = Field(default=768, description="Vector embedding dimension (768 for nomic-embed-text, 1536 for OpenAI)")
     max_memories_per_query: int = Field(default=10, description="Max memories to retrieve")
     
+    # Qdrant vector store settings
+    qdrant_host: str = Field(default="localhost", description="Qdrant server host")
+    qdrant_port: int = Field(default=6333, description="Qdrant server port")
+    qdrant_collection: str = Field(default="closedclaw_memories", description="Qdrant collection name")
+    
     # Privacy settings
     default_sensitivity: int = Field(
         default=1, 

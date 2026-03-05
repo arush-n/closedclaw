@@ -1,0 +1,154 @@
+# =============================================================================
+# Closedclaw + Openclaw — Integrated Docker Compose
+# =============================================================================
+#
+# Architecture:
+#   HOST:   closedclaw server (:8765) + dashboard (:3001) — NOT in Docker
+#   DOCKER: openclaw MCP (:8766 internal), openclaw UI (:3000), Qdrant, bridge
+#
+# The closedclaw server is ONLY accessible from the host machine.
+# The control bridge inside Docker connects back to closedclaw via
+# host.docker.internal to enforce policies.
+#
+# Usage:
+#   cp .env.example .env   # edit with your API keys
+#   docker compose up -d   # start Docker services
+#   Then launch closedclaw on the host separately (see launch scripts)
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Qdrant Vector Database — stores openclaw's memory embeddings
+  # ---------------------------------------------------------------------------
+  mem0-store:
+    image: qdrant/qdrant:latest
+    container_name: closedclaw-qdrant
+    volumes:
+      - mem0_storage:/qdrant/storage
+    networks:
+      - closedclaw-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Openclaw MCP Server (OpenMemory API)
+  # ---------------------------------------------------------------------------
+  openmemory-mcp:
+    image: mem0/openmemory-mcp
+    build:
+      context: ../mem0/openmemory/api/
+    container_name: closedclaw-openclaw-mcp
+    environment:
+      - USER=${USER_ID:-default-user}
+      - API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Tell openclaw to use the control bridge for restricted services
+      - CLOSEDCLAW_BRIDGE_URL=http://control-bridge:9000
+      - CLOSEDCLAW_BRIDGE_ENABLED=true
+    env_file:
+      - .env
+    depends_on:
+      mem0-store:
+        condition: service_healthy
+      control-bridge:
+        condition: service_started
+    volumes:
+      - ../mem0/openmemory/api:/usr/src/openmemory
+      - ./config/openclaw.yaml:/usr/src/openmemory/closedclaw_config.yaml:ro
+    networks:
+      - closedclaw-net
+    command: >
+      sh -c "uvicorn main:app --host 0.0.0.0 --port 8766 --reload"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8766/docs"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # NOT exposed to host — only accessible within Docker network
+    # Closedclaw controls access via the bridge
+
+  # ---------------------------------------------------------------------------
+  # Openclaw Dashboard (OpenMemory UI)
+  # ---------------------------------------------------------------------------
+  openmemory-ui:
+    build:
+      context: ../mem0/openmemory/ui/
+      dockerfile: Dockerfile
+    image: mem0/openmemory-ui:latest
+    container_name: closedclaw-openclaw-ui
+    ports:
+      - "${OPENCLAW_UI_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:${OPENCLAW_UI_PORT:-3000}/api
+      - NEXT_PUBLIC_USER_ID=${USER_ID:-default-user}
+      # Internal API URL for server-side rendering
+      - API_URL=http://openmemory-mcp:8766
+    depends_on:
+      openmemory-mcp:
+        condition: service_started
+    networks:
+      - closedclaw-net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Closedclaw Control Bridge
+  # ---------------------------------------------------------------------------
+  # Runs inside Docker, mediates between openclaw and closedclaw (host).
+  # Enforces restricted app policies, memory safety, and audit logging.
+  # ---------------------------------------------------------------------------
+  control-bridge:
+    build:
+      context: ./bridge/
+      dockerfile: Dockerfile
+    image: closedclaw/control-bridge:latest
+    container_name: closedclaw-bridge
+    environment:
+      - BRIDGE_LOG_LEVEL=${BRIDGE_LOG_LEVEL:-INFO}
+      - CLOSEDCLAW_HOST_URL=http://host.docker.internal:${CLOSEDCLAW_PORT:-8765}
+      - OPENCLAW_INTERNAL_URL=http://openmemory-mcp:8766
+      - BRIDGE_CONFIG_PATH=/config/closedclaw.yaml
+      - OPENCLAW_CONFIG_PATH=/config/openclaw.yaml
+      # MCP service credentials (passed through to connectors)
+      - GOOGLE_OAUTH_TOKEN=${GOOGLE_OAUTH_TOKEN:-}
+      - NOTION_API_KEY=${NOTION_API_KEY:-}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    volumes:
+      - ./config:/config:ro
+      - bridge_data:/data
+    networks:
+      - closedclaw-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    # NOT exposed to host — internal bridge only
+
+# ---------------------------------------------------------------------------
+# Networks
+# ---------------------------------------------------------------------------
+networks:
+  closedclaw-net:
+    driver: bridge
+    name: closedclaw-network
+
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
+volumes:
+  mem0_storage:
+    name: closedclaw-qdrant-storage
+  bridge_data:
+    name: closedclaw-bridge-data

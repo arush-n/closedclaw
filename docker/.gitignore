@@ -1,0 +1,8 @@
+# Local config overrides
+config/*.local.yaml
+
+# Environment
+.env
+
+# Data volumes (in Docker)
+data/

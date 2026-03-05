@@ -33,6 +33,7 @@ from closedclaw.api.routes import (
     swarm,
     addon,
     config_routes,
+    bridge,
 )
 
 # Configure logging
@@ -245,6 +246,7 @@ Get your token from `~/.closedclaw/token`
     app.include_router(swarm.router)
     app.include_router(addon.router)
     app.include_router(config_routes.router)
+    app.include_router(bridge.router)
 
     # Root redirect → dashboard
     _dashboard_port = int(os.getenv("CLOSEDCLAW_DASHBOARD_PORT", "0"))

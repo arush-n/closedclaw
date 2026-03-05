@@ -52,6 +52,7 @@ class SwarmTaskType(str, Enum):
     COMPACT_MEMORIES = "compact_memories"
     EVOLVE_POLICY = "evolve_policy"
     ADDON_PROCESS = "addon_process"
+    TOOL_DISPATCH = "tool_dispatch"
 
 
 class SwarmTask(BaseModel):

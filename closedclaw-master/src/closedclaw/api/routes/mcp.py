@@ -181,3 +181,88 @@ async def forward_mcp_raw(request: MCPRawRequest, token: str = Depends(get_auth_
     except httpx.RequestError as exc:
         logger.error("MCP request failed: %s", exc)
         raise HTTPException(status_code=502, detail="MCP request failed")
+
+
+# ── Tool Dispatch ─────────────────────────────────────────────────────
+
+
+class MCPToolRequest(BaseModel):
+    """Request to invoke a tool through the swarm's TOOL_DISPATCH pipeline."""
+
+    tool: str = Field(..., min_length=1, description="Tool name (gmail, notion, drive, slack, github)")
+    operation: str = Field(..., min_length=1, description="Operation to perform")
+    params: Dict[str, Any] = Field(default_factory=dict, description="Operation parameters")
+    user_id: str = Field(default="default")
+
+
+@router.post("/tool")
+async def dispatch_tool(request: MCPToolRequest, token: str = Depends(get_auth_token)):
+    """Dispatch a tool operation through the swarm's governance pipeline.
+
+    Routes through: governance -> tool_orchestrator -> auditor
+    """
+    from closedclaw.api.deps import get_swarm_coordinator
+
+    coordinator = get_swarm_coordinator()
+    if not coordinator:
+        raise HTTPException(
+            status_code=503,
+            detail="Swarm system not enabled. Set CLOSEDCLAW_SWARM_ENABLED=true.",
+        )
+
+    from closedclaw.api.agents.swarm.models import SwarmTask, SwarmTaskType
+
+    task = SwarmTask(
+        task_type=SwarmTaskType.TOOL_DISPATCH,
+        user_id=request.user_id,
+        input_data={
+            "tool": request.tool,
+            "operation": request.operation,
+            "params": request.params,
+            "prompt": f"{request.tool} {request.operation}",
+        },
+    )
+    result = await coordinator.execute(task)
+    return {
+        "tool": request.tool,
+        "operation": request.operation,
+        "status": result.status,
+        "data": result.output,
+        "agents_invoked": result.agents_invoked,
+        "llm_calls": result.llm_calls_made,
+        "duration_ms": result.duration_ms,
+    }
+
+
+@router.get("/tools")
+async def list_available_tools(token: str = Depends(get_auth_token)):
+    """List all available MCP tool connectors and their operations."""
+    return {
+        "tools": [
+            {
+                "name": "gmail",
+                "operations": ["get_inbox_summary", "search_emails", "get_email", "send_email", "get_labels"],
+                "write_operations": ["send_email"],
+            },
+            {
+                "name": "notion",
+                "operations": ["search_pages", "get_page", "create_page", "update_page", "list_databases", "query_database"],
+                "write_operations": ["create_page", "update_page"],
+            },
+            {
+                "name": "drive",
+                "operations": ["list_files", "search_files", "get_file_metadata", "get_file_content", "upload_file"],
+                "write_operations": ["upload_file"],
+            },
+            {
+                "name": "slack",
+                "operations": ["list_channels", "search_messages", "get_channel_history", "send_message", "get_user_info"],
+                "write_operations": ["send_message"],
+            },
+            {
+                "name": "github",
+                "operations": ["list_repos", "get_repo", "list_issues", "create_issue", "list_pull_requests", "get_file_content"],
+                "write_operations": ["create_issue"],
+            },
+        ],
+    }
