@@ -10,7 +10,7 @@ import json
 import secrets
 import hmac
 from pathlib import Path
-from typing import Optional, Literal
+from typing import ClassVar, Optional, Literal
 from functools import lru_cache
 
 from pydantic import Field, field_validator
@@ -248,7 +248,7 @@ class Settings(BaseSettings):
         return hmac.compare_digest(candidate, expected_token)
     
     # Fields that contain secrets and must be encrypted on disk
-    _SENSITIVE_FIELDS = frozenset({
+    _SENSITIVE_FIELDS: ClassVar[frozenset] = frozenset({
         "openai_api_key",
         "anthropic_api_key",
         "groq_api_key",

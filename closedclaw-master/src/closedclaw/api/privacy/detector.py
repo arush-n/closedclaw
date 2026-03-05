@@ -390,6 +390,45 @@ class PIIDetector:
             # Fall back to regex
             return self._detect_with_regex(text)
     
+    async def detect_with_ollama(
+        self,
+        text: str,
+        entities: Optional[List[str]] = None,
+    ) -> List[DetectedEntity]:
+        """
+        Enhanced detection using local Ollama LLM + regex/Presidio.
+
+        Merges results from the standard pipeline with Ollama-based detection.
+        Falls back to standard detection if Ollama is unavailable.
+        """
+        standard = self.detect(text, entities)
+
+        try:
+            from .ollama_redactor import get_ollama_redaction_engine
+            engine = get_ollama_redaction_engine()
+            if not await engine.is_available():
+                return standard
+            ollama_entities = await engine.detect_pii(text)
+        except Exception as exc:
+            logger.debug("Ollama-enhanced detection unavailable: %s", exc)
+            return standard
+
+        if not ollama_entities:
+            return standard
+
+        # Merge: add Ollama entities that don't overlap with existing ones
+        merged = list(standard)
+        for oe in ollama_entities:
+            overlaps = any(
+                not (oe.end <= se.start or oe.start >= se.end)
+                for se in standard
+            )
+            if not overlaps:
+                merged.append(oe)
+
+        merged.sort(key=lambda e: e.start)
+        return merged
+
     def detect_batch(
         self,
         texts: List[str],

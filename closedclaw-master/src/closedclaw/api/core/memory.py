@@ -342,6 +342,13 @@ class ClosedclawMemory:
                     mem["sensitivity"] = sens
                     mem["tags"] = mt
                     mem["consent_required"] = stored.get("consent_required", sens >= 3) if stored else sens >= 3
+                    if stored:
+                        mem["encrypted"] = stored.get("encrypted", False)
+                        mem["content_hash"] = stored.get("content_hash")
+                        mem["source"] = stored.get("source", "conversation")
+                        mem["access_count"] = stored.get("access_count", 0)
+                        mem["last_accessed"] = stored.get("last_accessed")
+                        mem["expires_at"] = stored.get("expires_at")
                     filtered.append(mem)
                     if len(filtered) >= limit:
                         break
@@ -395,6 +402,12 @@ class ClosedclawMemory:
                     "sensitivity": sens,
                     "tags": mt,
                     "consent_required": stored.get("consent_required", sens >= 3) if stored else sens >= 3,
+                    "encrypted": stored.get("encrypted", False) if stored else False,
+                    "content_hash": stored.get("content_hash") if stored else None,
+                    "source": stored.get("source", "conversation") if stored else "conversation",
+                    "access_count": stored.get("access_count", 0) if stored else 0,
+                    "last_accessed": stored.get("last_accessed") if stored else None,
+                    "expires_at": stored.get("expires_at") if stored else None,
                     "score": float(token_overlap) if token_overlap > 0 else 1.0,
                 })
                 if len(filtered) >= limit:

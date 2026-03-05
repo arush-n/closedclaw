@@ -96,7 +96,7 @@ Documentation = "https://closedclaw.dev/docs"
 Repository = "https://github.com/closedclaw/closedclaw"
 
 [tool.hatch.build.targets.wheel]
-packages = ["."]
+packages = ["closedclaw"]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -105,7 +105,7 @@ include = [
 ]
 
 [tool.hatch.build]
-sources = ["."]
+sources = [".."]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

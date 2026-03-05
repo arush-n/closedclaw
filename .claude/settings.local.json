@@ -20,7 +20,13 @@
       "Bash(python -c \"from closedclaw.api.agents.swarm.bus import MessageBus; print\\(''bus OK''\\)\")",
       "Bash(python -c \"from closedclaw.api.agents.swarm.constitution import Constitution; print\\(''constitution OK''\\)\")",
       "Bash(python -c \"from closedclaw.api.agents.swarm.base import BaseAgent; print\\(''base OK''\\)\")",
-      "Bash(timeout 8 python -c \":*)"
+      "Bash(timeout 8 python -c \":*)",
+      "Bash(docker pull mem0/openmemory-mcp)",
+      "Bash(docker pull mem0/openmemory-ui:latest)",
+      "Bash(docker compose build control-bridge)",
+      "Bash(curl -s http://localhost:6333/)",
+      "Bash(curl -s http://localhost:6333/healthz)",
+      "Bash(curl -s http://localhost:6333/health)"
     ]
   }
 }

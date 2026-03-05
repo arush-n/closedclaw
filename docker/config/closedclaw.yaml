@@ -17,18 +17,27 @@ dashboard:
   # The closedclaw dashboard is host-only, separate from openclaw's UI
 
 # --- LLM Provider ---
-provider: "openai"
-default_model: "gpt-4o-mini"
-embedding_model: "text-embedding-3-small"
+# Default to ollama for fully local operation (no cloud keys needed)
+# Set CLOSEDCLAW_PROVIDER=openai and supply OPENAI_API_KEY for cloud mode
+provider: "ollama"
+default_model: "llama3.2:3b"
+embedding_model: "nomic-embed-text"
 
 # Ollama (local engine) settings
 local_engine:
   enabled: true
   hardware_profile: "standard"
-  llm_model: "llama3.2-3b-q4"
+  llm_model: "llama3.2:3b"
   embedding_model: "nomic-embed-text"
-  ollama_base_url: "http://localhost:11434"
+  # Inside Docker, Ollama runs as a sibling container
+  ollama_base_url: "http://ollama:11434"
   auto_pull_models: true
+
+# Redaction engine — use local Ollama for PII classification and redaction
+redaction:
+  engine: "ollama"
+  model: "llama3.2:3b"
+  ollama_base_url: "http://ollama:11434"
 
 # --- Privacy & Security ---
 privacy:
@@ -223,7 +232,7 @@ controlled_mcps:
   email_mcp:
     name: "Controlled Email Access"
     description: "Read-only email summaries with PII redaction"
-    endpoint: "http://host.docker.internal:8765/v1/mcp/email"
+    endpoint: "http://closedclaw-server:8765/v1/mcp/email"
     operations:
       - name: "get_inbox_summary"
         description: "Get a summary of recent emails (subjects, senders, dates only)"
@@ -237,7 +246,7 @@ controlled_mcps:
   calendar_mcp:
     name: "Controlled Calendar Access"
     description: "Read-only calendar with location redaction"
-    endpoint: "http://host.docker.internal:8765/v1/mcp/calendar"
+    endpoint: "http://closedclaw-server:8765/v1/mcp/calendar"
     operations:
       - name: "get_upcoming_events"
         description: "List upcoming calendar events"
@@ -251,7 +260,7 @@ controlled_mcps:
   file_mcp:
     name: "Controlled File Access"
     description: "Read-only file listing (no content access)"
-    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/files"
+    endpoint: "http://closedclaw-server:8765/v1/bridge/mcp/files"
     operations:
       - name: "list_files"
         description: "List file names and sizes (no content)"
@@ -262,7 +271,7 @@ controlled_mcps:
   gmail_mcp:
     name: "Controlled Gmail Access"
     description: "Gmail access via closedclaw governance pipeline"
-    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/gmail"
+    endpoint: "http://closedclaw-server:8765/v1/bridge/mcp/gmail"
     operations:
       - name: "get_inbox_summary"
         description: "Recent inbox subjects and senders (no bodies)"
@@ -281,7 +290,7 @@ controlled_mcps:
   notion_mcp:
     name: "Controlled Notion Access"
     description: "Notion workspace access via closedclaw governance"
-    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/notion"
+    endpoint: "http://closedclaw-server:8765/v1/bridge/mcp/notion"
     operations:
       - name: "search_pages"
         description: "Search pages and databases"
@@ -297,7 +306,7 @@ controlled_mcps:
   drive_mcp:
     name: "Controlled Drive Access"
     description: "Google Drive access via closedclaw governance"
-    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/drive"
+    endpoint: "http://closedclaw-server:8765/v1/bridge/mcp/drive"
     operations:
       - name: "list_files"
         description: "List files in a folder"
@@ -313,7 +322,7 @@ controlled_mcps:
   slack_mcp:
     name: "Controlled Slack Access"
     description: "Slack workspace access via closedclaw governance"
-    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/slack"
+    endpoint: "http://closedclaw-server:8765/v1/bridge/mcp/slack"
     operations:
       - name: "list_channels"
         description: "List channels"
@@ -329,7 +338,7 @@ controlled_mcps:
   github_mcp:
     name: "Controlled GitHub Access"
     description: "GitHub repo access via closedclaw governance"
-    endpoint: "http://host.docker.internal:8765/v1/bridge/mcp/github"
+    endpoint: "http://closedclaw-server:8765/v1/bridge/mcp/github"
     operations:
       - name: "list_repos"
         description: "List user repositories"
@@ -347,10 +356,10 @@ controlled_mcps:
 # --- Bridge Configuration ---
 # Controls how closedclaw connects to the Docker environment
 bridge:
-  # The bridge runs INSIDE Docker and communicates with closedclaw on the host
+  # All services run inside Docker — use container names
   port: 9000
-  closedclaw_host_url: "http://host.docker.internal:8765"
-  openclaw_internal_url: "http://openmemory-mcp:8766"
+  closedclaw_host_url: "http://closedclaw-server:8765"
+  openclaw_internal_url: "http://openmemory-mcp:8765"
   
   # Health check interval (seconds)
   health_check_interval: 30

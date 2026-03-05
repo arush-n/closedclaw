@@ -1,23 +1,51 @@
 # =============================================================================
-# Closedclaw + Openclaw — Integrated Docker Compose
+# Closedclaw + Openclaw — All-in-One Docker Compose
 # =============================================================================
 #
-# Architecture:
-#   HOST:   closedclaw server (:8765) + dashboard (:3001) — NOT in Docker
-#   DOCKER: openclaw MCP (:8766 internal), openclaw UI (:3000), Qdrant, bridge
-#
-# The closedclaw server is ONLY accessible from the host machine.
-# The control bridge inside Docker connects back to closedclaw via
-# host.docker.internal to enforce policies.
+# Architecture (everything in Docker):
+#   closedclaw-server (:8765)  — governance server
+#   openclaw MCP      (:8766 internal) — memory API
+#   openclaw UI       (:3000)  — dashboard
+#   Qdrant             (:6333)  — vector DB
+#   control-bridge    (:9000 internal)  — policy bridge
+#   ollama            (:11434) — local LLM for redaction/classification
 #
 # Usage:
 #   cp .env.example .env   # edit with your API keys
-#   docker compose up -d   # start Docker services
-#   Then launch closedclaw on the host separately (see launch scripts)
+#   docker compose up -d   # start everything
+#   open http://localhost:3000  # openclaw UI
+#   open http://localhost:8765/docs  # closedclaw API docs
 #
 # =============================================================================
 
 services:
+  # ---------------------------------------------------------------------------
+  # Ollama — Local LLM for redaction, classification, and privacy tasks
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: closedclaw-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - closedclaw-net
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/11434'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # GPU passthrough (uncomment for NVIDIA GPU support):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
   # ---------------------------------------------------------------------------
   # Qdrant Vector Database — stores openclaw's memory embeddings
   # ---------------------------------------------------------------------------
@@ -29,7 +57,7 @@ services:
     networks:
       - closedclaw-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/6333'"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -38,18 +66,56 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
+  # Closedclaw Server — privacy governance, memory firewall, audit
+  # ---------------------------------------------------------------------------
+  closedclaw-server:
+    build:
+      context: ../closedclaw-master/
+      dockerfile: ../docker/closedclaw-server/Dockerfile
+    image: closedclaw/server:latest
+    container_name: closedclaw-server
+    environment:
+      - CLOSEDCLAW_HOST=0.0.0.0
+      - CLOSEDCLAW_PORT=8765
+      - CLOSEDCLAW_LOG_LEVEL=${CLOSEDCLAW_LOG_LEVEL:-INFO}
+      - CLOSEDCLAW_FAST_STARTUP=true
+      # Ollama inside Docker
+      - CLOSEDCLAW_OLLAMA_BASE_URL=http://ollama:11434
+      - CLOSEDCLAW_LOCAL_ENGINE_ENABLED=true
+      - CLOSEDCLAW_LOCAL_ENGINE_LLM_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      # Provider config — use ollama for local-only operation
+      - CLOSEDCLAW_PROVIDER=${CLOSEDCLAW_PROVIDER:-ollama}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      - ./config:/config:ro
+      - closedclaw_data:/data
+    networks:
+      - closedclaw-net
+    ports:
+      - "${CLOSEDCLAW_PORT:-8765}:8765"
+    depends_on:
+      ollama:
+        condition: service_healthy
+      mem0-store:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8765/health', timeout=5)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
   # Openclaw MCP Server (OpenMemory API)
   # ---------------------------------------------------------------------------
   openmemory-mcp:
     image: mem0/openmemory-mcp
-    build:
-      context: ../mem0/openmemory/api/
     container_name: closedclaw-openclaw-mcp
     environment:
       - USER=${USER_ID:-default-user}
       - API_KEY=${OPENAI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      # Tell openclaw to use the control bridge for restricted services
+      # Route through control bridge for restricted services
       - CLOSEDCLAW_BRIDGE_URL=http://control-bridge:9000
       - CLOSEDCLAW_BRIDGE_ENABLED=true
     env_file:
@@ -60,28 +126,20 @@ services:
       control-bridge:
         condition: service_started
     volumes:
-      - ../mem0/openmemory/api:/usr/src/openmemory
       - ./config/openclaw.yaml:/usr/src/openmemory/closedclaw_config.yaml:ro
     networks:
       - closedclaw-net
-    command: >
-      sh -c "uvicorn main:app --host 0.0.0.0 --port 8766 --reload"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8766/docs"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8765/docs', timeout=5)\""]
       interval: 15s
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    # NOT exposed to host — only accessible within Docker network
-    # Closedclaw controls access via the bridge
 
   # ---------------------------------------------------------------------------
   # Openclaw Dashboard (OpenMemory UI)
   # ---------------------------------------------------------------------------
   openmemory-ui:
-    build:
-      context: ../mem0/openmemory/ui/
-      dockerfile: Dockerfile
     image: mem0/openmemory-ui:latest
     container_name: closedclaw-openclaw-ui
     ports:
@@ -89,8 +147,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:${OPENCLAW_UI_PORT:-3000}/api
       - NEXT_PUBLIC_USER_ID=${USER_ID:-default-user}
-      # Internal API URL for server-side rendering
-      - API_URL=http://openmemory-mcp:8766
+      - API_URL=http://openmemory-mcp:8765
     depends_on:
       openmemory-mcp:
         condition: service_started
@@ -101,9 +158,6 @@ services:
   # ---------------------------------------------------------------------------
   # Closedclaw Control Bridge
   # ---------------------------------------------------------------------------
-  # Runs inside Docker, mediates between openclaw and closedclaw (host).
-  # Enforces restricted app policies, memory safety, and audit logging.
-  # ---------------------------------------------------------------------------
   control-bridge:
     build:
       context: ./bridge/
@@ -112,11 +166,12 @@ services:
     container_name: closedclaw-bridge
     environment:
       - BRIDGE_LOG_LEVEL=${BRIDGE_LOG_LEVEL:-INFO}
-      - CLOSEDCLAW_HOST_URL=http://host.docker.internal:${CLOSEDCLAW_PORT:-8765}
-      - OPENCLAW_INTERNAL_URL=http://openmemory-mcp:8766
+      # Point to closedclaw-server container instead of host.docker.internal
+      - CLOSEDCLAW_HOST_URL=http://closedclaw-server:8765
+      - OPENCLAW_INTERNAL_URL=http://openmemory-mcp:8765
       - BRIDGE_CONFIG_PATH=/config/closedclaw.yaml
       - OPENCLAW_CONFIG_PATH=/config/openclaw.yaml
-      # MCP service credentials (passed through to connectors)
+      # MCP service credentials
       - GOOGLE_OAUTH_TOKEN=${GOOGLE_OAUTH_TOKEN:-}
       - NOTION_API_KEY=${NOTION_API_KEY:-}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
@@ -126,15 +181,15 @@ services:
       - bridge_data:/data
     networks:
       - closedclaw-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    depends_on:
+      closedclaw-server:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:9000/health', timeout=3)\""]
       interval: 15s
       timeout: 5s
       retries: 3
     restart: unless-stopped
-    # NOT exposed to host — internal bridge only
 
 # ---------------------------------------------------------------------------
 # Networks
@@ -152,3 +207,7 @@ volumes:
     name: closedclaw-qdrant-storage
   bridge_data:
     name: closedclaw-bridge-data
+  closedclaw_data:
+    name: closedclaw-server-data
+  ollama_data:
+    name: closedclaw-ollama-data
