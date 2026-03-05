@@ -35,30 +35,48 @@ export default function GraphPage() {
   const [isSavingMemory, setIsSavingMemory] = useState(false);
   const [selectedMemory, setSelectedMemory] = useState<MemoryData | null>(null);
   const [chatQuery, setChatQuery] = useState("");
+  const [activeGroup, setActiveGroup] = useState<string | null>(null);
+  const [availableGroups, setAvailableGroups] = useState<Record<string, number>>({});
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch memories from API
+  // Progressive memory loading — small initial batch, then rest in background
   const fetchMemories = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
+    const INITIAL_BATCH = 50;
+    const FULL_LIMIT = 200;
+
     try {
-      const params = new URLSearchParams({ limit: "200" });
-      if (userId) {
-        params.append("user_id", userId);
-      }
+      const params = new URLSearchParams({ limit: String(INITIAL_BATCH) });
+      if (userId) params.append("user_id", userId);
 
       const response = await fetch(`/api/memories?${params.toString()}`);
       const data = await response.json();
 
-      if (data.success) {
-        setMemories(data.memories);
-      } else {
+      if (!data.success) {
         throw new Error(data.error || "Failed to fetch memories");
+      }
+
+      setMemories(data.memories);
+      setIsLoading(false);
+
+      // Load remaining in background if there might be more
+      if (data.memories.length >= INITIAL_BATCH) {
+        const fullParams = new URLSearchParams({ limit: String(FULL_LIMIT) });
+        if (userId) fullParams.append("user_id", userId);
+
+        fetch(`/api/memories?${fullParams.toString()}`)
+          .then((r) => r.json())
+          .then((fullData) => {
+            if (fullData.success && fullData.memories.length > INITIAL_BATCH) {
+              setMemories(fullData.memories);
+            }
+          })
+          .catch(() => {});
       }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
-    } finally {
       setIsLoading(false);
     }
   }, [userId]);
@@ -71,6 +89,10 @@ export default function GraphPage() {
   const handleMemoryClick = (memory: MemoryData) => {
     setSelectedMemory(memory);
   };
+
+  const handleGroupsChange = useCallback((groups: Record<string, number>) => {
+    setAvailableGroups(groups);
+  }, []);
 
   const handleAddMemory = useCallback(async () => {
     if (!newMemoryText.trim() || isSavingMemory) {
@@ -203,8 +225,42 @@ export default function GraphPage() {
               onMemoryClick={handleMemoryClick}
               showLegend={true}
               showControls={true}
+              activeGroup={activeGroup}
+              onGroupsChange={handleGroupsChange}
             />
             
+            {/* Group Filter Pills */}
+            {Object.keys(availableGroups).length > 0 && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 px-3 py-1.5 bg-slate-950/80 backdrop-blur-xl border border-slate-700/40 rounded-xl">
+                <button
+                  onClick={() => setActiveGroup(null)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    activeGroup === null
+                      ? "bg-indigo-500/25 text-indigo-200 border border-indigo-500/40"
+                      : "text-slate-400 hover:text-slate-200 border border-transparent"
+                  }`}
+                >
+                  All
+                </button>
+                {Object.entries(availableGroups)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([group, count]) => (
+                    <button
+                      key={group}
+                      onClick={() => setActiveGroup(activeGroup === group ? null : group)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                        activeGroup === group
+                          ? "bg-indigo-500/25 text-indigo-200 border border-indigo-500/40"
+                          : "text-slate-400 hover:text-slate-200 border border-transparent"
+                      }`}
+                    >
+                      {group}
+                      <span className="ml-1 text-[10px] text-slate-500">{count}</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+
             {/* Left Sidebar */}
             <Sidebar
               onAddMemory={() => setShowAddMemoryModal(true)}
@@ -333,7 +389,7 @@ export default function GraphPage() {
 
       {/* Bottom Chat Input Bar */}
       {!isChatOpen && viewMode === "graph" && (
-        <div className="absolute bottom-6 right-6 z-20 w-full max-w-sm px-2">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-full max-w-lg px-4">
           <div className="bg-slate-950/85 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden">
             <div className="flex items-center gap-2 p-2">
               <button

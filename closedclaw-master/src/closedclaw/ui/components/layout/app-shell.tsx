@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ConsentCenter } from "@/components/consent/consent-center";
-import { Power } from "lucide-react";
+import { Power, KeyRound } from "lucide-react";
 
 const links = [
   { href: "/graph", label: "Graph", icon: "◈" },
@@ -34,6 +34,49 @@ export function AppShell({ children }: AppShellProps) {
   const [shutdownPassword, setShutdownPassword] = useState("");
   const [shutdownError, setShutdownError] = useState("");
   const [shuttingDown, setShuttingDown] = useState(false);
+
+  // Password change state
+  const [dialogTab, setDialogTab] = useState<"shutdown" | "password">("shutdown");
+  const [currentPw, setCurrentPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [pwSuccess, setPwSuccess] = useState("");
+  const [savingPw, setSavingPw] = useState(false);
+
+  const handlePasswordChange = async () => {
+    setPwError("");
+    setPwSuccess("");
+    if (newPw.length < 8) {
+      setPwError("New password must be at least 8 characters");
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwError("Passwords do not match");
+      return;
+    }
+    setSavingPw(true);
+    try {
+      const res = await fetch("/api/password", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPwError(data.detail || data.error || "Failed to update password");
+      } else {
+        setPwSuccess("Password updated successfully");
+        setCurrentPw("");
+        setNewPw("");
+        setConfirmPw("");
+      }
+    } catch {
+      setPwError("Connection error");
+    } finally {
+      setSavingPw(false);
+    }
+  };
 
   const handleShutdown = async () => {
     if (!shutdownPassword.trim()) {
@@ -148,7 +191,7 @@ export function AppShell({ children }: AppShellProps) {
             <ConsentCenter />
             <div className="w-px h-6 bg-white/[0.06]" />
             <button
-              onClick={() => { setShowShutdown(true); setShutdownError(""); setShutdownPassword(""); }}
+              onClick={() => { setShowShutdown(true); setShutdownError(""); setShutdownPassword(""); setDialogTab("shutdown"); setPwError(""); setPwSuccess(""); }}
               className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
               title="Shutdown server"
             >
@@ -166,53 +209,153 @@ export function AppShell({ children }: AppShellProps) {
             onClick={() => !shuttingDown && setShowShutdown(false)}
           />
           <div className="relative glass-card rounded-2xl p-6 w-full max-w-sm space-y-4 border border-white/[0.08] shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
-                <Power className="w-5 h-5 text-red-400" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-white">Shutdown Server</h3>
-                <p className="text-xs text-slate-400">This will stop all closedclaw services</p>
-              </div>
+            {/* Tab selector */}
+            <div className="flex gap-1 bg-white/[0.04] rounded-lg p-0.5">
+              <button
+                onClick={() => setDialogTab("shutdown")}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  dialogTab === "shutdown"
+                    ? "bg-white/[0.08] text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" />
+                Shutdown
+              </button>
+              <button
+                onClick={() => setDialogTab("password")}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  dialogTab === "password"
+                    ? "bg-white/[0.08] text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                Password
+              </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm text-slate-400">Shutdown password</label>
-              <input
-                type="password"
-                value={shutdownPassword}
-                onChange={(e) => setShutdownPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleShutdown()}
-                placeholder="Enter shutdown password"
-                className="glass-input rounded-lg px-3 py-2 text-sm w-full"
-                autoFocus
-                disabled={shuttingDown}
-              />
-              <p className="text-[11px] text-slate-500">
-                Check server logs or run: <code className="text-violet-400">docker logs closedclaw-server 2&gt;&amp;1 | grep &quot;SHUTDOWN PASSWORD&quot;</code>
-              </p>
-            </div>
+            {dialogTab === "shutdown" ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <Power className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Shutdown Server</h3>
+                    <p className="text-xs text-slate-400">This will stop all closedclaw services</p>
+                  </div>
+                </div>
 
-            {shutdownError && (
-              <p className="text-sm text-red-400">{shutdownError}</p>
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-400">Shutdown password</label>
+                  <input
+                    type="password"
+                    value={shutdownPassword}
+                    onChange={(e) => setShutdownPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleShutdown()}
+                    placeholder="Enter shutdown password"
+                    className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                    autoFocus
+                    disabled={shuttingDown}
+                  />
+                  <p className="text-[11px] text-slate-500">
+                    Check server logs or run: <code className="text-violet-400">docker logs closedclaw-server 2&gt;&amp;1 | grep &quot;SHUTDOWN PASSWORD&quot;</code>
+                  </p>
+                </div>
+
+                {shutdownError && (
+                  <p className="text-sm text-red-400">{shutdownError}</p>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handleShutdown}
+                    disabled={shuttingDown}
+                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                  >
+                    {shuttingDown ? "Shutting down..." : "Shutdown"}
+                  </button>
+                  <button
+                    onClick={() => setShowShutdown(false)}
+                    disabled={shuttingDown}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                    <KeyRound className="w-5 h-5 text-violet-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white">Change Password</h3>
+                    <p className="text-xs text-slate-400">Set a custom shutdown password</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-sm text-slate-400">Current password</label>
+                    <input
+                      type="password"
+                      value={currentPw}
+                      onChange={(e) => setCurrentPw(e.target.value)}
+                      placeholder="Current or auto-generated password"
+                      className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                      autoFocus
+                      disabled={savingPw}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm text-slate-400">New password</label>
+                    <input
+                      type="password"
+                      value={newPw}
+                      onChange={(e) => setNewPw(e.target.value)}
+                      placeholder="Min 8 characters"
+                      className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                      disabled={savingPw}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm text-slate-400">Confirm new password</label>
+                    <input
+                      type="password"
+                      value={confirmPw}
+                      onChange={(e) => setConfirmPw(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handlePasswordChange()}
+                      placeholder="Confirm new password"
+                      className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                      disabled={savingPw}
+                    />
+                  </div>
+                </div>
+
+                {pwError && <p className="text-sm text-red-400">{pwError}</p>}
+                {pwSuccess && <p className="text-sm text-emerald-400">{pwSuccess}</p>}
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    onClick={handlePasswordChange}
+                    disabled={savingPw}
+                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-violet-500/20 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30 transition-colors disabled:opacity-50"
+                  >
+                    {savingPw ? "Saving..." : "Save Password"}
+                  </button>
+                  <button
+                    onClick={() => setShowShutdown(false)}
+                    disabled={savingPw}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
             )}
-
-            <div className="flex gap-2 pt-2">
-              <button
-                onClick={handleShutdown}
-                disabled={shuttingDown}
-                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors disabled:opacity-50"
-              >
-                {shuttingDown ? "Shutting down..." : "Shutdown"}
-              </button>
-              <button
-                onClick={() => setShowShutdown(false)}
-                disabled={shuttingDown}
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
           </div>
         </div>
       )}

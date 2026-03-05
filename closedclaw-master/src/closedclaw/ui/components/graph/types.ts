@@ -28,6 +28,9 @@ export interface MemoryData {
   updated_at?: string;
   custom_categories?: string[];
   score?: number;
+  sensitivity?: number;
+  encrypted?: boolean;
+  group?: string;
 }
 
 export type EdgeType = "memory-memory" | "memory-user" | "similarity";
@@ -51,6 +54,7 @@ export interface GraphStats {
   totalUsers: number;
   totalConnections: number;
   categories: Record<string, number>;
+  groups: Record<string, number>;
 }
 
 export interface MemoryGraphProps {
@@ -63,6 +67,8 @@ export interface MemoryGraphProps {
   showLegend?: boolean;
   showControls?: boolean;
   similarityThreshold?: number;
+  activeGroup?: string | null;
+  onGroupsChange?: (groups: Record<string, number>) => void;
 }
 
 export interface LegendProps {

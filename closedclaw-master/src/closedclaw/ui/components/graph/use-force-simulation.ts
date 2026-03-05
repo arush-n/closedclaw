@@ -16,7 +16,8 @@ export interface ForceSimulationControls {
 
 /**
  * Custom hook to manage d3-force simulation lifecycle.
- * Simulation runs during interactions for physics-based node positioning.
+ * Auto-pauses when simulation settles to save CPU.
+ * Scales charge strength for large graphs.
  */
 export function useForceSimulation(
   nodes: GraphNode[],
@@ -26,28 +27,46 @@ export function useForceSimulation(
 ): ForceSimulationControls {
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
   const lastTickTimeRef = useRef(0);
+  const tickThrottleMs = nodes.length > 100 ? 50 : 33; // Lower framerate for big graphs
 
   useEffect(() => {
     if (!enabled || nodes.length === 0) {
       return;
     }
 
-    // Only create simulation once
+    // Scale charge strength down for large graphs to avoid O(n^2) blowup
+    const scaledCharge =
+      nodes.length > 150
+        ? FORCE_CONFIG.chargeStrength * 0.4
+        : nodes.length > 80
+        ? FORCE_CONFIG.chargeStrength * 0.6
+        : FORCE_CONFIG.chargeStrength;
+
+    // Faster decay for large graphs so simulation settles sooner
+    const scaledAlphaDecay =
+      nodes.length > 100
+        ? FORCE_CONFIG.alphaDecay * 1.5
+        : FORCE_CONFIG.alphaDecay;
+
     if (!simulationRef.current) {
       const simulation = d3
         .forceSimulation<GraphNode>(nodes)
-        .alphaDecay(FORCE_CONFIG.alphaDecay)
+        .alphaDecay(scaledAlphaDecay)
         .alphaMin(FORCE_CONFIG.alphaMin)
         .velocityDecay(FORCE_CONFIG.velocityDecay)
         .on("tick", () => {
           const now = performance.now();
-          if (now - lastTickTimeRef.current >= 33) {
+          if (now - lastTickTimeRef.current >= tickThrottleMs) {
             lastTickTimeRef.current = now;
             onTick();
           }
+        })
+        .on("end", () => {
+          // Final tick when simulation fully settles
+          onTick();
         });
 
-      // Link force - spring connections between nodes
+      // Link force
       simulation.force(
         "link",
         d3
@@ -65,13 +84,13 @@ export function useForceSimulation(
           })
       );
 
-      // Charge force - repulsion between nodes
+      // Charge force — scaled for graph size
       simulation.force(
         "charge",
-        d3.forceManyBody<GraphNode>().strength(FORCE_CONFIG.chargeStrength)
+        d3.forceManyBody<GraphNode>().strength(scaledCharge)
       );
 
-      // Collision force - prevent node overlap
+      // Collision force
       simulation.force(
         "collide",
         d3
@@ -82,6 +101,7 @@ export function useForceSimulation(
               : FORCE_CONFIG.collisionRadius.memory
           )
           .strength(0.7)
+          .iterations(nodes.length > 100 ? 1 : 2) // Fewer iterations for big graphs
       );
 
       // Centering forces
@@ -90,8 +110,15 @@ export function useForceSimulation(
 
       simulationRef.current = simulation;
     } else {
-      // Update nodes and edges
+      // Update existing simulation
       simulationRef.current.nodes(nodes);
+
+      // Update charge for new node count
+      const chargeForce = simulationRef.current.force("charge") as d3.ForceManyBody<GraphNode>;
+      if (chargeForce) {
+        chargeForce.strength(scaledCharge);
+      }
+
       const linkForce = simulationRef.current.force("link") as d3.ForceLink<
         GraphNode,
         GraphEdge
@@ -107,7 +134,7 @@ export function useForceSimulation(
         simulationRef.current.stop();
       }
     };
-  }, [nodes, edges, enabled, onTick]);
+  }, [nodes, edges, enabled, onTick, tickThrottleMs]);
 
   const reheat = useCallback(() => {
     if (simulationRef.current) {

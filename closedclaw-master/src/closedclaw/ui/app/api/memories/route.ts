@@ -16,6 +16,8 @@ interface Memory {
   created_at?: string;
   updated_at?: string;
   score?: number;
+  sensitivity?: number;
+  encrypted?: boolean;
 }
 
 interface MemoriesResponse {
@@ -211,6 +213,8 @@ function normalizeMemoryItem(item: unknown, index: number): Memory | null {
     created_at: typeof raw.created_at === "string" ? raw.created_at : undefined,
     updated_at: typeof raw.updated_at === "string" ? raw.updated_at : undefined,
     score: typeof raw.score === "number" ? raw.score : undefined,
+    sensitivity: typeof raw.sensitivity === "number" ? raw.sensitivity : undefined,
+    encrypted: typeof raw.encrypted === "boolean" ? raw.encrypted : undefined,
   };
 }
 

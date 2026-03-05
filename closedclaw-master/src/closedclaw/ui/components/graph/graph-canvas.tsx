@@ -4,6 +4,9 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useMemo } from "
 import { colors } from "./constants";
 import type { GraphCanvasProps, GraphNode } from "./types";
 
+// Cap DPR to reduce pixel count on retina displays
+const MAX_DPR = 1.5;
+
 export const GraphCanvas = memo<GraphCanvasProps>(
   ({
     nodes,
@@ -35,14 +38,35 @@ export const GraphCanvas = memo<GraphCanvasProps>(
     const highlightSet = useMemo(() => new Set(highlightNodeIds), [highlightNodeIds]);
     const canvasMetricsRef = useRef<{ width: number; height: number; dpr: number } | null>(null);
 
-    // Initialize canvas quality
+    // Dirty flag — only redraw when something changed
+    const dirtyRef = useRef(true);
+    const isAnimatingRef = useRef(false);
+    const hasNewMemoriesRef = useRef(false);
+
+    // Mark dirty when render-affecting props change
+    useEffect(() => {
+      dirtyRef.current = true;
+    }, [nodes, edges, panX, panY, zoom, width, height, selectedNodeId, highlightSet, draggingNodeId]);
+
+    // Detect new memories (for pulse animation)
+    useEffect(() => {
+      const now = Date.now();
+      hasNewMemoriesRef.current = nodes.some(
+        (n) =>
+          n.type === "memory" &&
+          n.data.created_at &&
+          now - new Date(n.data.created_at).getTime() < 24 * 60 * 60 * 1000
+      );
+    }, [nodes]);
+
+    // Initialize canvas
     useLayoutEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingQuality = "low"; // "low" is much faster than "high"
     }, []);
 
     // Spatial grid for optimized hit detection
@@ -129,7 +153,12 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         const nodeId = getNodeAtPosition(x, y);
         if (nodeId !== currentHoveredNode.current) {
           currentHoveredNode.current = nodeId;
+          dirtyRef.current = true;
           onNodeHover(nodeId);
+          // Update cursor based on hover
+          if (canvasRef.current) {
+            canvasRef.current.style.cursor = nodeId ? "pointer" : "grab";
+          }
         }
 
         onPanMove(e);
@@ -176,15 +205,27 @@ export const GraphCanvas = memo<GraphCanvasProps>(
       [draggingNodeId, getNodeAtPosition, onNodeClick, onNodeDragEnd, onPanEnd]
     );
 
-    // Draw function
+    // Draw function — only does work when dirty
     const draw = useCallback(() => {
+      const needsAnimation = hasNewMemoriesRef.current || !!draggingNodeId;
+
+      // Skip frame if nothing changed and no animation needed
+      if (!dirtyRef.current && !needsAnimation) {
+        if (isAnimatingRef.current) {
+          animationRef.current = requestAnimationFrame(draw);
+        }
+        return;
+      }
+
+      dirtyRef.current = false;
+
       const canvas = canvasRef.current;
       if (!canvas) return;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
       const nextCanvasWidth = Math.floor(width * dpr);
       const nextCanvasHeight = Math.floor(height * dpr);
       const previousMetrics = canvasMetricsRef.current;
@@ -207,46 +248,40 @@ export const GraphCanvas = memo<GraphCanvasProps>(
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Clear canvas
-      const bgGradient = ctx.createRadialGradient(
-        width * 0.5,
-        height * 0.45,
-        Math.min(width, height) * 0.06,
-        width * 0.5,
-        height * 0.5,
-        Math.max(width, height) * 0.72
-      );
-      bgGradient.addColorStop(0, "#0b1428");
-      bgGradient.addColorStop(0.55, colors.background.secondary);
-      bgGradient.addColorStop(1, colors.background.primary);
-      ctx.fillStyle = bgGradient;
+      // Clear with flat color (much cheaper than radial gradient)
+      ctx.fillStyle = colors.background.primary;
       ctx.fillRect(0, 0, width, height);
 
-      const gridSize = 24;
-      ctx.save();
-      ctx.strokeStyle = "rgba(71, 85, 105, 0.12)";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let x = 0; x <= width; x += gridSize) {
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
+      // Only draw grid when zoomed in enough to see it
+      if (zoom > 0.4) {
+        const gridSize = 24;
+        ctx.save();
+        ctx.strokeStyle = "rgba(71, 85, 105, 0.08)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = 0; x <= width; x += gridSize) {
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+        }
+        for (let y = 0; y <= height; y += gridSize) {
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+        }
+        ctx.stroke();
+        ctx.restore();
       }
-      for (let y = 0; y <= height; y += gridSize) {
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-      }
-      ctx.stroke();
-      ctx.restore();
 
-      // Draw edges first (behind nodes)
+      // Draw edges — use flat strokes instead of per-edge gradients
       ctx.save();
       edges.forEach((edge) => {
-        const sourceNode = typeof edge.source === "string" 
-          ? nodeMapRef.current.get(edge.source)
-          : edge.source;
-        const targetNode = typeof edge.target === "string"
-          ? nodeMapRef.current.get(edge.target)
-          : edge.target;
+        const sourceNode =
+          typeof edge.source === "string"
+            ? nodeMapRef.current.get(edge.source)
+            : edge.source;
+        const targetNode =
+          typeof edge.target === "string"
+            ? nodeMapRef.current.get(edge.target)
+            : edge.target;
 
         if (!sourceNode || !targetNode) return;
 
@@ -270,7 +305,7 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         if (selectedNodeId) {
           const isConnected =
             sourceNode.id === selectedNodeId || targetNode.id === selectedNodeId;
-          opacity = isConnected ? 0.8 : 0.1;
+          opacity = isConnected ? 0.8 : 0.05;
         }
 
         const dx = x2 - x1;
@@ -279,16 +314,11 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         const edgeFade = Math.max(0.35, Math.min(1, 280 / Math.max(distance, 1)));
         const edgeOpacity = Math.min(0.9, opacity * edgeFade);
 
-        const edgeGradient = ctx.createLinearGradient(x1, y1, x2, y2);
-        edgeGradient.addColorStop(0, edge.color.replace(/[\d.]+\)$/, `${edgeOpacity})`));
-        edgeGradient.addColorStop(0.5, edge.color.replace(/[\d.]+\)$/, `${Math.min(0.95, edgeOpacity + 0.1)})`));
-        edgeGradient.addColorStop(1, edge.color.replace(/[\d.]+\)$/, `${edgeOpacity})`));
-
-        // Draw edge
+        // Flat color stroke — much cheaper than createLinearGradient per edge
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
-        ctx.strokeStyle = edgeGradient;
+        ctx.strokeStyle = edge.color.replace(/[\d.]+\)$/, `${edgeOpacity})`);
         ctx.lineWidth = Math.max(0.35, edge.visualProps.thickness * Math.max(zoom, 0.35));
         ctx.stroke();
       });
@@ -296,7 +326,7 @@ export const GraphCanvas = memo<GraphCanvasProps>(
 
       // Draw nodes
       const time = (Date.now() - startTimeRef.current) / 1000;
-      
+
       nodes.forEach((node) => {
         const screenX = node.x * zoom + panX;
         const screenY = node.y * zoom + panY;
@@ -325,7 +355,7 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         ctx.save();
         ctx.globalAlpha = nodeOpacity;
 
-        // Draw glow for highlighted/hovered nodes
+        // Draw glow only for hovered/highlighted nodes (expensive, so only when needed)
         if (isHighlighted || isHovered || isDragging) {
           const gradient = ctx.createRadialGradient(
             screenX,
@@ -335,7 +365,10 @@ export const GraphCanvas = memo<GraphCanvasProps>(
             screenY,
             nodeSize * 3.4
           );
-          gradient.addColorStop(0, node.type === "memory" ? colors.memory.glow : colors.user.glow);
+          gradient.addColorStop(
+            0,
+            node.type === "memory" ? colors.memory.glow : colors.user.glow
+          );
           gradient.addColorStop(1, "transparent");
           ctx.fillStyle = gradient;
           ctx.fillRect(
@@ -346,27 +379,35 @@ export const GraphCanvas = memo<GraphCanvasProps>(
           );
         }
 
-        // Draw node circle
+        // Draw node circle — flat fill for normal nodes, gradient only for hovered
         ctx.beginPath();
         ctx.arc(screenX, screenY, nodeSize, 0, Math.PI * 2);
-        
-        // Fill with gradient
-        const nodeColor = node.color || (node.type === "memory" ? colors.memory.primary : colors.user.primary);
-        const gradient = ctx.createRadialGradient(
-          screenX - nodeSize * 0.3,
-          screenY - nodeSize * 0.3,
-          0,
-          screenX,
-          screenY,
-          nodeSize
-        );
-        gradient.addColorStop(0, nodeColor.replace(/([\d.]+)\)$/, "0.95)"));
-        gradient.addColorStop(1, nodeColor);
-        ctx.fillStyle = gradient;
+
+        const nodeColor =
+          node.color || (node.type === "memory" ? colors.memory.primary : colors.user.primary);
+
+        if (isHovered || isDragging) {
+          // Gradient fill only for interactive nodes
+          const gradient = ctx.createRadialGradient(
+            screenX - nodeSize * 0.3,
+            screenY - nodeSize * 0.3,
+            0,
+            screenX,
+            screenY,
+            nodeSize
+          );
+          gradient.addColorStop(0, nodeColor.replace(/([\d.]+)\)$/, "0.95)"));
+          gradient.addColorStop(1, nodeColor);
+          ctx.fillStyle = gradient;
+        } else {
+          // Flat fill for non-interactive nodes (much cheaper)
+          ctx.fillStyle = nodeColor;
+        }
         ctx.fill();
 
         // Draw border
-        ctx.strokeStyle = node.type === "memory" ? colors.memory.border : colors.user.border;
+        ctx.strokeStyle =
+          node.type === "memory" ? colors.memory.border : colors.user.border;
         ctx.lineWidth = isHovered || isDragging ? 1.2 : 0.8;
         ctx.stroke();
 
@@ -374,16 +415,19 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         if (node.type === "memory" && node.data.created_at) {
           const ageMs = Date.now() - new Date(node.data.created_at).getTime();
           if (ageMs < 24 * 60 * 60 * 1000) {
-            // Pulse for new memories
             const pulsePhase = (time * 2) % 1;
             const pulseRadius = nodeSize * (1 + pulsePhase * 0.5);
             const pulseOpacity = 0.3 * (1 - pulsePhase);
-            
+
             ctx.beginPath();
             ctx.arc(screenX, screenY, pulseRadius, 0, Math.PI * 2);
-            ctx.strokeStyle = colors.status.new.replace(/[\d.]+\)$/, `${pulseOpacity})`);
+            ctx.strokeStyle = colors.status.new.replace(
+              /[\d.]+\)$/,
+              `${pulseOpacity})`
+            );
             ctx.lineWidth = 2;
             ctx.stroke();
+            dirtyRef.current = true; // Keep animating pulse
           }
         }
 
@@ -397,8 +441,10 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         ctx.restore();
       });
 
-      // Continue animation
-      animationRef.current = requestAnimationFrame(draw);
+      // Continue animation loop
+      if (isAnimatingRef.current) {
+        animationRef.current = requestAnimationFrame(draw);
+      }
     }, [
       nodes,
       edges,
@@ -412,16 +458,33 @@ export const GraphCanvas = memo<GraphCanvasProps>(
       draggingNodeId,
     ]);
 
-    // Start animation loop
+    // Start/stop animation loop
     useEffect(() => {
       startTimeRef.current = Date.now();
+      isAnimatingRef.current = true;
+      dirtyRef.current = true;
       animationRef.current = requestAnimationFrame(draw);
       return () => {
+        isAnimatingRef.current = false;
         if (animationRef.current) {
           cancelAnimationFrame(animationRef.current);
         }
       };
     }, [draw]);
+
+    // Attach wheel listener natively with passive:false so preventDefault works.
+    // React's onWheel is passive by default — can't prevent page zoom/scroll.
+    useEffect(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const handler = (e: WheelEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onWheel(e as unknown as React.WheelEvent);
+      };
+      canvas.addEventListener("wheel", handler, { passive: false });
+      return () => canvas.removeEventListener("wheel", handler);
+    }, [onWheel]);
 
     return (
       <canvas
@@ -430,11 +493,10 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         onMouseMove={handleMouseMove}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
-        onMouseLeave={(e) => {
+        onMouseLeave={() => {
           onPanEnd();
           onNodeHover(null);
         }}
-        onWheel={onWheel}
       />
     );
   }

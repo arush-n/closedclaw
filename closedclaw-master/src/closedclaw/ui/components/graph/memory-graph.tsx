@@ -5,6 +5,7 @@ import { GraphCanvas } from "./graph-canvas";
 import { Legend } from "./legend";
 import { NavigationControls } from "./navigation-controls";
 import { NodeDetailPanel } from "./node-detail-panel";
+import { NodeHoverTooltip } from "./node-hover-tooltip";
 import { useForceSimulation } from "./use-force-simulation";
 import { useGraphInteractions } from "./use-graph-interactions";
 import { colors, getMemoryColor, getMemoryAgeOpacity, NODE_SIZES, SIMILARITY_CONFIG } from "./constants";
@@ -36,6 +37,46 @@ function tokenizeText(text?: string): string[] {
     .toLowerCase()
     .split(/\W+/)
     .filter((token) => token.length > 2);
+}
+
+// Derive a group label from memory categories
+const GROUP_MAPPINGS: Record<string, string> = {
+  work: "Work",
+  project: "Work",
+  programming: "Dev",
+  tools: "Dev",
+  code: "Dev",
+  personal: "Personal",
+  life: "Personal",
+  preference: "Preferences",
+  like: "Preferences",
+  knowledge: "Knowledge",
+  learn: "Knowledge",
+  learning: "Knowledge",
+  research: "Knowledge",
+  interest: "Interests",
+  ai: "Interests",
+  relationship: "People",
+  person: "People",
+  design: "Design",
+  visualization: "Design",
+  databases: "Dev",
+  "machine-learning": "Knowledge",
+  scale: "System",
+  autoseed: "System",
+};
+
+function deriveGroup(categories?: string[]): string {
+  if (!categories || categories.length === 0) return "Uncategorized";
+  for (const cat of categories) {
+    const key = cat.toLowerCase();
+    if (GROUP_MAPPINGS[key]) return GROUP_MAPPINGS[key];
+    // Partial match
+    for (const [pattern, group] of Object.entries(GROUP_MAPPINGS)) {
+      if (key.includes(pattern)) return group;
+    }
+  }
+  return "Other";
 }
 
 function calculateTokenSimilarity(words1: Set<string>, words2: Set<string>): number {
@@ -87,6 +128,7 @@ function buildGraphData(
   const edges: GraphEdge[] = [];
   const userNodes = new Map<string, GraphNode>();
   const categories: Record<string, number> = {};
+  const groups: Record<string, number> = {};
   const tokenSets = safeMemories.map((memory) => new Set(tokenizeText(memory.memory)));
   const tokenIndex = new Map<string, number[]>();
 
@@ -110,6 +152,11 @@ function buildGraphData(
     memory.categories?.forEach(cat => {
       categories[cat] = (categories[cat] || 0) + 1;
     });
+
+    // Assign group
+    const group = deriveGroup(memory.categories);
+    memory.group = group;
+    groups[group] = (groups[group] || 0) + 1;
 
     const node: GraphNode = {
       id: memory.id,
@@ -228,6 +275,7 @@ function buildGraphData(
     totalUsers: userNodes.size,
     totalConnections: edges.length,
     categories,
+    groups,
   };
 
   return { nodes, edges, stats };
@@ -243,10 +291,14 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
   showLegend = true,
   showControls = true,
   similarityThreshold = SIMILARITY_CONFIG.threshold,
+  activeGroup = null,
+  onGroupsChange,
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [hasAutoFitted, setHasAutoFitted] = useState(false);
+  const [hoverTooltip, setHoverTooltip] = useState<{ node: GraphNode; x: number; y: number } | null>(null);
+  const mousePosRef = useRef({ x: 0, y: 0 });
 
   // Graph interactions
   const {
@@ -274,10 +326,32 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
   } = useGraphInteractions();
 
   // Build graph data
-  const { nodes, edges, stats } = useMemo(
-    () => buildGraphData(memories, similarityThreshold),
-    [memories, similarityThreshold]
-  );
+  const { nodes, edges, stats } = useMemo(() => {
+    const result = buildGraphData(memories, similarityThreshold);
+    if (!activeGroup) return result;
+    // Filter nodes by group
+    const filteredNodeIds = new Set(
+      result.nodes
+        .filter((n) => n.type === "user" || n.data.group === activeGroup)
+        .map((n) => n.id)
+    );
+    return {
+      nodes: result.nodes.filter((n) => filteredNodeIds.has(n.id)),
+      edges: result.edges.filter((e) => {
+        const sourceId = typeof e.source === "string" ? e.source : e.source.id;
+        const targetId = typeof e.target === "string" ? e.target : e.target.id;
+        return filteredNodeIds.has(sourceId) && filteredNodeIds.has(targetId);
+      }),
+      stats: result.stats,
+    };
+  }, [memories, similarityThreshold, activeGroup]);
+
+  // Report groups to parent
+  useEffect(() => {
+    if (onGroupsChange && stats.groups) {
+      onGroupsChange(stats.groups);
+    }
+  }, [stats.groups, onGroupsChange]);
 
   // Force simulation
   const [, forceRender] = useReducer((x: number) => x + 1, 0);
@@ -326,6 +400,14 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
   const handleNodeHoverWithCallback = useCallback(
     (nodeId: string | null) => {
       handleNodeHover(nodeId);
+      if (nodeId) {
+        const node = nodes.find((n) => n.id === nodeId);
+        if (node) {
+          setHoverTooltip({ node, x: mousePosRef.current.x, y: mousePosRef.current.y });
+        }
+      } else {
+        setHoverTooltip(null);
+      }
       if (onMemoryHover) {
         const node = nodes.find((n) => n.id === nodeId);
         onMemoryHover(node?.data || null);
@@ -380,6 +462,15 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
     <div
       ref={containerRef}
       className={`relative w-full h-full bg-zinc-950 overflow-hidden ${className}`}
+      onMouseMove={(e) => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) {
+          mousePosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+          if (hoverTooltip) {
+            setHoverTooltip((prev) => prev ? { ...prev, x: mousePosRef.current.x, y: mousePosRef.current.y } : null);
+          }
+        }
+      }}
     >
       {/* Loading overlay */}
       {isLoading && memories.length === 0 && (
@@ -433,6 +524,17 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
         node={selectedNode}
         onClose={() => setSelectedNode(null)}
       />
+
+      {/* Hover Tooltip */}
+      {!selectedNode && hoverTooltip && (
+        <NodeHoverTooltip
+          node={hoverTooltip.node}
+          x={hoverTooltip.x}
+          y={hoverTooltip.y}
+          containerWidth={containerSize.width}
+          containerHeight={containerSize.height}
+        />
+      )}
 
       {/* Legend */}
       {showLegend && <Legend stats={stats} isLoading={isLoading} />}

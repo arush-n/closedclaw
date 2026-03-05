@@ -139,6 +139,26 @@ export const Legend = memo<LegendProps>(function Legend({
                   </div>
                 </div>
 
+                {/* Groups */}
+                {Object.keys(stats.groups || {}).length > 0 && (
+                  <div className="space-y-2.5 pt-1">
+                    <h4 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Groups
+                    </h4>
+                    <div className="space-y-1.5 text-xs">
+                      {Object.entries(stats.groups)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 8)
+                        .map(([group, count]) => (
+                          <div key={group} className="flex items-center justify-between gap-2.5">
+                            <span className="text-slate-300 truncate">{group}</span>
+                            <span className="text-slate-500 text-[10px]">{count}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Categories (if any) */}
                 {categoryEntries.length > 0 && (
                   <div className="space-y-2.5 pt-1">

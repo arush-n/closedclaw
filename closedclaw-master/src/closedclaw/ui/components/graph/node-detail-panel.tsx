@@ -2,12 +2,23 @@
 
 import { memo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Copy, Clock, Tag, User } from "lucide-react";
+import { X, Copy, Clock, Tag, User, Shield, ShieldAlert, Lock } from "lucide-react";
 import type { GraphNode, MemoryData } from "./types";
 
 interface NodeDetailPanelProps {
   node: GraphNode | null;
   onClose: () => void;
+}
+
+const SENSITIVITY_LABELS: Record<number, { label: string; color: string }> = {
+  0: { label: "Public", color: "text-emerald-400" },
+  1: { label: "General", color: "text-blue-400" },
+  2: { label: "Personal", color: "text-amber-400" },
+  3: { label: "Sensitive", color: "text-red-400" },
+};
+
+function isMemorySecure(memory: MemoryData): boolean {
+  return (memory.sensitivity !== undefined && memory.sensitivity >= 2) || memory.encrypted === true;
 }
 
 export const NodeDetailPanel = memo<NodeDetailPanelProps>(function NodeDetailPanel({
@@ -20,8 +31,11 @@ export const NodeDetailPanel = memo<NodeDetailPanelProps>(function NodeDetailPan
 
   const memory = node.data as MemoryData;
   const indicatorClass = node.type === "memory" ? "bg-emerald-400" : "bg-slate-300";
+  const secure = node.type === "memory" && isMemorySecure(memory);
+  const sensitivityInfo = SENSITIVITY_LABELS[memory.sensitivity ?? 1] ?? SENSITIVITY_LABELS[1];
 
   const handleCopy = async () => {
+    if (secure) return;
     try {
       await navigator.clipboard.writeText(memory.memory);
       setCopied(true);
@@ -61,6 +75,15 @@ export const NodeDetailPanel = memo<NodeDetailPanelProps>(function NodeDetailPan
               <span className="text-sm font-medium text-zinc-200">
                 {node.type === "memory" ? "Memory" : "User"}
               </span>
+              {node.type === "memory" && (
+                <span className={`text-xs ${sensitivityInfo.color}`}>
+                  {secure ? (
+                    <ShieldAlert className="w-3.5 h-3.5 inline-block" />
+                  ) : (
+                    <Shield className="w-3.5 h-3.5 inline-block" />
+                  )}
+                </span>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -73,27 +96,68 @@ export const NodeDetailPanel = memo<NodeDetailPanelProps>(function NodeDetailPan
 
           {/* Content */}
           <div className="p-4 space-y-4 overflow-y-auto max-h-[400px]">
-            {/* Memory text */}
+            {/* Security badge */}
+            {node.type === "memory" && memory.sensitivity !== undefined && (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+                secure ? "bg-red-950/40 border border-red-900/40" : "bg-emerald-950/30 border border-emerald-900/30"
+              }`}>
+                {secure ? (
+                  <Lock className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                ) : (
+                  <Shield className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                )}
+                <span className={`text-xs ${secure ? "text-red-300" : "text-emerald-300"}`}>
+                  {sensitivityInfo.label}
+                  {memory.encrypted && " · Encrypted"}
+                </span>
+              </div>
+            )}
+
+            {/* Memory text - only show if not secure */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
                   Content
                 </h4>
-                <button
-                  onClick={handleCopy}
-                  className="p-1 hover:bg-zinc-800 rounded transition-colors"
-                  title="Copy to clipboard"
-                >
-                  <Copy className="w-3.5 h-3.5 text-zinc-400" />
-                </button>
+                {!secure && (
+                  <button
+                    onClick={handleCopy}
+                    className="p-1 hover:bg-zinc-800 rounded transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-zinc-400" />
+                  </button>
+                )}
               </div>
-              <p className="text-sm text-zinc-300 leading-relaxed">
-                {memory.memory}
-              </p>
+              {secure ? (
+                <div className="flex items-center gap-2 py-3 px-3 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+                  <Lock className="w-4 h-4 text-zinc-500" />
+                  <p className="text-sm text-zinc-500 italic">
+                    Content hidden — sensitivity level {memory.sensitivity}
+                    {memory.encrypted && " (encrypted)"}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-sm text-zinc-300 leading-relaxed">
+                  {memory.memory}
+                </p>
+              )}
               {copied && (
                 <span className="text-xs text-emerald-400">Copied!</span>
               )}
             </div>
+
+            {/* Group label */}
+            {memory.group && (
+              <div className="space-y-1">
+                <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                  Group
+                </h4>
+                <span className="inline-block px-2.5 py-1 bg-indigo-500/15 border border-indigo-500/30 rounded-md text-xs text-indigo-300 capitalize">
+                  {memory.group}
+                </span>
+              </div>
+            )}
 
             {/* Metadata */}
             <div className="space-y-2">
