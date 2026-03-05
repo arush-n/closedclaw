@@ -4,10 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ConsentCenter } from "@/components/consent/consent-center";
+import { Power } from "lucide-react";
 
 const links = [
   { href: "/graph", label: "Graph", icon: "◈" },
   { href: "/vault", label: "Vault", icon: "◇" },
+  { href: "/memories", label: "Memories", icon: "◫" },
+  { href: "/apps", label: "Apps", icon: "◧" },
   { href: "/audit", label: "Audit", icon: "◎" },
   { href: "/policies", label: "Policies", icon: "◆" },
   { href: "/insights", label: "Insights", icon: "◉" },
@@ -25,6 +28,38 @@ export function AppShell({ children }: AppShellProps) {
   const [connected, setConnected] = useState(false);
   const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const failuresRef = useRef(0);
+
+  // Shutdown state
+  const [showShutdown, setShowShutdown] = useState(false);
+  const [shutdownPassword, setShutdownPassword] = useState("");
+  const [shutdownError, setShutdownError] = useState("");
+  const [shuttingDown, setShuttingDown] = useState(false);
+
+  const handleShutdown = async () => {
+    if (!shutdownPassword.trim()) {
+      setShutdownError("Password required");
+      return;
+    }
+    setShuttingDown(true);
+    setShutdownError("");
+    try {
+      const res = await fetch("/api/shutdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: shutdownPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setShutdownError(data.detail || data.error || "Shutdown failed");
+        setShuttingDown(false);
+        return;
+      }
+      setConnected(false);
+    } catch {
+      setShutdownError("Connection lost — server may have shut down");
+      setConnected(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -78,7 +113,8 @@ export function AppShell({ children }: AppShellProps) {
           {/* Navigation */}
           <nav className="flex items-center gap-0.5 glass-subtle rounded-xl px-1 py-1">
             {links.map((item) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href ||
+                (item.href.length > 1 && pathname.startsWith(item.href + "/"));
               return (
                 <Link
                   key={item.href}
@@ -110,9 +146,76 @@ export function AppShell({ children }: AppShellProps) {
             </div>
             <div className="w-px h-6 bg-white/[0.06]" />
             <ConsentCenter />
+            <div className="w-px h-6 bg-white/[0.06]" />
+            <button
+              onClick={() => { setShowShutdown(true); setShutdownError(""); setShutdownPassword(""); }}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200"
+              title="Shutdown server"
+            >
+              <Power className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>
+
+      {/* Shutdown dialog */}
+      {showShutdown && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => !shuttingDown && setShowShutdown(false)}
+          />
+          <div className="relative glass-card rounded-2xl p-6 w-full max-w-sm space-y-4 border border-white/[0.08] shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                <Power className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-white">Shutdown Server</h3>
+                <p className="text-xs text-slate-400">This will stop all closedclaw services</p>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm text-slate-400">Shutdown password</label>
+              <input
+                type="password"
+                value={shutdownPassword}
+                onChange={(e) => setShutdownPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleShutdown()}
+                placeholder="Enter shutdown password"
+                className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                autoFocus
+                disabled={shuttingDown}
+              />
+              <p className="text-[11px] text-slate-500">
+                Check server logs or run: <code className="text-violet-400">docker logs closedclaw-server 2&gt;&amp;1 | grep &quot;SHUTDOWN PASSWORD&quot;</code>
+              </p>
+            </div>
+
+            {shutdownError && (
+              <p className="text-sm text-red-400">{shutdownError}</p>
+            )}
+
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={handleShutdown}
+                disabled={shuttingDown}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+              >
+                {shuttingDown ? "Shutting down..." : "Shutdown"}
+              </button>
+              <button
+                onClick={() => setShowShutdown(false)}
+                disabled={shuttingDown}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="animate-fade-in">{children}</div>
     </div>

@@ -14,6 +14,7 @@ import {
   Cpu,
   Globe,
   Lock,
+  Brain,
 } from "lucide-react";
 
 interface ConfigData {
@@ -90,6 +91,17 @@ export default function SettingsPage() {
   const [consentLevel, setConsentLevel] = useState(2);
   const [redaction, setRedaction] = useState(true);
 
+  // OpenMemory config state
+  const [omLlmProvider, setOmLlmProvider] = useState("ollama");
+  const [omLlmModel, setOmLlmModel] = useState("");
+  const [omLlmOllamaUrl, setOmLlmOllamaUrl] = useState("");
+  const [omEmbedProvider, setOmEmbedProvider] = useState("ollama");
+  const [omEmbedModel, setOmEmbedModel] = useState("");
+  const [omEmbedOllamaUrl, setOmEmbedOllamaUrl] = useState("");
+  const [omCustomInstructions, setOmCustomInstructions] = useState("");
+  const [omLoading, setOmLoading] = useState(false);
+  const [omSaving, setOmSaving] = useState(false);
+
   const loadConfig = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -110,9 +122,41 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const loadOpenMemoryConfig = useCallback(async () => {
+    setOmLoading(true);
+    try {
+      const [llmRes, embedRes, instrRes] = await Promise.allSettled([
+        fetch("/api/openmemory/config/mem0/llm", { cache: "no-store" }),
+        fetch("/api/openmemory/config/mem0/embedder", { cache: "no-store" }),
+        fetch("/api/openmemory/config/openmemory", { cache: "no-store" }),
+      ]);
+      if (llmRes.status === "fulfilled" && llmRes.value.ok) {
+        const d = (await llmRes.value.json()) as any;
+        setOmLlmProvider(d.provider || "ollama");
+        setOmLlmModel(d.config?.model || "");
+        setOmLlmOllamaUrl(d.config?.ollama_base_url || "");
+      }
+      if (embedRes.status === "fulfilled" && embedRes.value.ok) {
+        const d = (await embedRes.value.json()) as any;
+        setOmEmbedProvider(d.provider || "ollama");
+        setOmEmbedModel(d.config?.model || "");
+        setOmEmbedOllamaUrl(d.config?.ollama_base_url || "");
+      }
+      if (instrRes.status === "fulfilled" && instrRes.value.ok) {
+        const d = (await instrRes.value.json()) as any;
+        setOmCustomInstructions(d.custom_instructions || "");
+      }
+    } catch {
+      // silently fail — openmemory may not be running
+    } finally {
+      setOmLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadConfig();
-  }, [loadConfig]);
+    loadOpenMemoryConfig();
+  }, [loadConfig, loadOpenMemoryConfig]);
 
   useEffect(() => {
     if (!success) return;
@@ -143,6 +187,50 @@ export default function SettingsPage() {
       setError(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveOpenMemoryConfig = async () => {
+    setOmSaving(true);
+    try {
+      await Promise.all([
+        fetch("/api/openmemory/config/mem0/llm", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: omLlmProvider,
+            config: {
+              model: omLlmModel,
+              ollama_base_url: omLlmOllamaUrl,
+            },
+          }),
+        }),
+        fetch("/api/openmemory/config/mem0/embedder", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: omEmbedProvider,
+            config: {
+              model: omEmbedModel,
+              ollama_base_url: omEmbedOllamaUrl,
+            },
+          }),
+        }),
+        fetch("/api/openmemory/config/openmemory", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            custom_instructions: omCustomInstructions,
+          }),
+        }),
+      ]);
+      setSuccess("OpenMemory settings saved.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to save OpenMemory settings."
+      );
+    } finally {
+      setOmSaving(false);
     }
   };
 
@@ -364,6 +452,108 @@ export default function SettingsPage() {
               </button>
             </div>
           </FieldRow>
+        </SettingsSection>
+      </div>
+
+      {/* OpenMemory Configuration */}
+      <div className="mt-6">
+        <SettingsSection
+          title="OpenMemory (Openclaw MCP)"
+          icon={<Brain className="w-4 h-4 text-violet-400" />}
+        >
+          {omLoading ? (
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading OpenMemory config...
+            </div>
+          ) : (
+            <>
+              {/* LLM sub-section */}
+              <div className="text-xs text-slate-500 uppercase tracking-wide pt-1">
+                LLM
+              </div>
+              <FieldRow label="Provider">
+                <select
+                  className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                  value={omLlmProvider}
+                  onChange={(e) => setOmLlmProvider(e.target.value)}
+                >
+                  <option value="ollama">Ollama</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                </select>
+              </FieldRow>
+              <FieldRow label="Model">
+                <input
+                  className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                  value={omLlmModel}
+                  onChange={(e) => setOmLlmModel(e.target.value)}
+                  placeholder="e.g. llama3.2:3b"
+                />
+              </FieldRow>
+              <FieldRow label="Ollama URL">
+                <input
+                  className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                  value={omLlmOllamaUrl}
+                  onChange={(e) => setOmLlmOllamaUrl(e.target.value)}
+                  placeholder="http://ollama:11434"
+                />
+              </FieldRow>
+
+              {/* Embedder sub-section */}
+              <div className="text-xs text-slate-500 uppercase tracking-wide pt-4 border-t border-white/[0.05]">
+                Embedder
+              </div>
+              <FieldRow label="Provider">
+                <select
+                  className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                  value={omEmbedProvider}
+                  onChange={(e) => setOmEmbedProvider(e.target.value)}
+                >
+                  <option value="ollama">Ollama</option>
+                  <option value="openai">OpenAI</option>
+                </select>
+              </FieldRow>
+              <FieldRow label="Model">
+                <input
+                  className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                  value={omEmbedModel}
+                  onChange={(e) => setOmEmbedModel(e.target.value)}
+                  placeholder="e.g. nomic-embed-text"
+                />
+              </FieldRow>
+              <FieldRow label="Ollama URL">
+                <input
+                  className="glass-input rounded-lg px-3 py-2 text-sm w-full"
+                  value={omEmbedOllamaUrl}
+                  onChange={(e) => setOmEmbedOllamaUrl(e.target.value)}
+                  placeholder="http://ollama:11434"
+                />
+              </FieldRow>
+
+              {/* Custom Instructions */}
+              <div className="text-xs text-slate-500 uppercase tracking-wide pt-4 border-t border-white/[0.05]">
+                Custom Instructions
+              </div>
+              <textarea
+                className="glass-input rounded-lg px-3 py-2 text-sm w-full resize-none h-24"
+                value={omCustomInstructions}
+                onChange={(e) => setOmCustomInstructions(e.target.value)}
+                placeholder="System-level instructions for memory extraction..."
+              />
+              <div>
+                <Button
+                  onClick={saveOpenMemoryConfig}
+                  disabled={omSaving}
+                >
+                  {omSaving && (
+                    <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                  )}
+                  Save OpenMemory Settings
+                </Button>
+              </div>
+            </>
+          )}
         </SettingsSection>
       </div>
 
