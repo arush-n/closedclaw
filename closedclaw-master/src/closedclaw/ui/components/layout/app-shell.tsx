@@ -12,6 +12,7 @@ const links = [
   { href: "/policies", label: "Policies", icon: "◆" },
   { href: "/insights", label: "Insights", icon: "◉" },
   { href: "/chat", label: "Chat", icon: "◌" },
+  { href: "/swarm", label: "Swarm", icon: "⬡" },
 ];
 
 interface AppShellProps {

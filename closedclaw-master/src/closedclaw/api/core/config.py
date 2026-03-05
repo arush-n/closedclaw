@@ -183,7 +183,13 @@ class Settings(BaseSettings):
     
     # Crypto settings
     enable_encryption: bool = Field(default=True, description="Enable memory encryption")
-    
+
+    # Agent Swarm settings
+    swarm_enabled: bool = Field(default=False, description="Enable the agent swarm system")
+    swarm_max_agent_calls: int = Field(default=10, ge=1, le=50, description="Max agent calls per task")
+    swarm_token_budget: int = Field(default=2000, ge=100, le=10000, description="Max tokens per swarm task")
+    constitution_path: Optional[str] = Field(default=None, description="Path to constitution.json (default: ~/.closedclaw/constitution.json)")
+
     # Paths
     closedclaw_dir: Path = Field(default=CLOSEDCLAW_DIR, description="Config directory")
     policies_dir: Path = Field(default=POLICIES_DIR, description="Policies directory")
@@ -286,7 +292,13 @@ def init_closedclaw():
     
     # Generate auth token
     settings.get_or_create_token()
-    
+
+    # Create default constitution if swarm enabled and file missing
+    constitution_path = Path(settings.constitution_path) if settings.constitution_path else (settings.closedclaw_dir / "constitution.json")
+    if not constitution_path.exists():
+        from closedclaw.api.agents.swarm.constitution import Constitution
+        Constitution(constitution_path)  # Creates default on init
+
     return settings
 
 

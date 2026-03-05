@@ -1,9 +1,26 @@
 {
   "permissions": {
     "allow": [
+      "Bash(pip install -e .)",
+      "Bash(test -f /c/Users/nandy/closedclaw/closedclaw/server.py)",
+      "Bash(test -d /c/Users/nandy/closedclaw/closedclaw)",
+      "Bash(python -c \"import os; print\\(os.path.exists\\(r''c:\\\\Users\\\\nandy\\\\closedclaw\\\\closedclaw\\\\server.py''\\)\\)\")",
+      "Bash(python -c \"import os; print\\(os.listdir\\(r''c:\\\\Users\\\\nandy\\\\closedclaw''\\)\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''closedclaw/server.py'', doraise=True\\)\")",
+      "Bash(python -m pip install -e .)",
+      "Bash(python -c \"from closedclaw.api.app import app; print\\(''Import OK''\\)\")",
+      "Bash(python -m pip show closedclaw)",
+      "Bash(python -c \"import site; print\\(site.getsitepackages\\(\\)\\); import sys; print\\(sys.path\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0, r''C:\\\\Users\\\\nandy\\\\closedclaw\\\\closedclaw-master\\\\src''\\); from closedclaw.api.app import app; print\\(''Import OK''\\)\")",
       "Bash(python -c \":*)",
-      "Bash(npx --yes tsc --noEmit --strict app/api/_lib/closedclaw.ts components/layout/app-shell.tsx)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/graph)"
+      "Bash(curl -s http://127.0.0.1:8765/health)",
+      "Bash(curl -s http://127.0.0.1:8765/v1/status)",
+      "Bash(python -c \"from closedclaw.api.agents.swarm.models import SwarmTaskType; print\\(''models OK''\\)\")",
+      "Bash(python -c \"from closedclaw.api.agents.swarm.crypto import AgentKeyring; print\\(''crypto OK''\\)\")",
+      "Bash(python -c \"from closedclaw.api.agents.swarm.bus import MessageBus; print\\(''bus OK''\\)\")",
+      "Bash(python -c \"from closedclaw.api.agents.swarm.constitution import Constitution; print\\(''constitution OK''\\)\")",
+      "Bash(python -c \"from closedclaw.api.agents.swarm.base import BaseAgent; print\\(''base OK''\\)\")",
+      "Bash(timeout 8 python -c \":*)"
     ]
   }
 }

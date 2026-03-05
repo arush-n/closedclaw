@@ -29,6 +29,7 @@ from closedclaw.api.routes import (
     insights,
     clawdbot,
     mcp,
+    swarm,
 )
 
 # Configure logging
@@ -215,7 +216,8 @@ Get your token from `~/.closedclaw/token`
     app.include_router(insights.router)
     app.include_router(clawdbot.router)
     app.include_router(mcp.router)
-    
+    app.include_router(swarm.router)
+
     # Custom OpenAPI schema
     def custom_openapi():
         if app.openapi_schema:
@@ -285,6 +287,10 @@ Get your token from `~/.closedclaw/token`
             {
                 "name": "MCP",
                 "description": "Model Context Protocol server discovery and tool forwarding",
+            },
+            {
+                "name": "Agent Swarm",
+                "description": "Crypto-secured agentic memory team with Ed25519-signed inter-agent communication",
             },
         ]
         

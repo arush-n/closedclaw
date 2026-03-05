@@ -269,6 +269,15 @@ class RateLimiter:
 _rate_limiter = RateLimiter()
 
 
+def get_swarm_coordinator():
+    """Get the SwarmCoordinator singleton (lazy init, returns None if swarm disabled)."""
+    settings = get_settings()
+    if not settings.swarm_enabled:
+        return None
+    from closedclaw.api.agents.swarm import get_swarm
+    return get_swarm()
+
+
 async def check_rate_limit(
     request: Request,
     token: str = Depends(get_auth_token),

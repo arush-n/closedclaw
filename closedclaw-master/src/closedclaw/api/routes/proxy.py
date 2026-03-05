@@ -263,11 +263,13 @@ async def _enrich_with_memory(
 ) -> tuple[list, ContextInjectionInfo]:
     """
     Enrich messages with relevant memory context.
-    
-    Applies privacy firewall rules to each retrieved memory.
+
+    If swarm is enabled, delegates to the SwarmCoordinator for
+    agentic memory retrieval + governance. Otherwise uses the
+    direct privacy firewall pipeline.
     """
     info = ContextInjectionInfo()
-    
+
     # Get the user's latest message for search
     latest_user_message = next(
         (m for m in reversed(messages) if m.role == "user" and m.content),
@@ -284,6 +286,19 @@ async def _enrich_with_memory(
     if len(query) > 4096:
         query = query[:4096]
 
+    # --- Swarm branch: agentic memory pipeline ---
+    settings = get_settings()
+    if settings.swarm_enabled:
+        return await _enrich_with_swarm(
+            messages=messages,
+            query=query,
+            user_id=user_id,
+            provider=provider,
+            sensitivity_max=sensitivity_max,
+            info=info,
+        )
+
+    # --- Legacy branch: direct firewall pipeline ---
     # Search for relevant memories
     search_results = memory.search(
         query=query,
@@ -291,13 +306,13 @@ async def _enrich_with_memory(
         sensitivity_max=sensitivity_max,
         limit=10,
     )
-    
+
     retrieved_memories = search_results.get("results", [])
     info.memories_retrieved = len(retrieved_memories)
-    
+
     if not retrieved_memories:
         return messages, info
-    
+
     # Build consent handler that bridges to the consent module
     async def _consent_handler(consent_req):
         try:
@@ -361,11 +376,11 @@ async def _enrich_with_memory(
         context_parts.append(f"- {content}{tags_str}")
 
     memory_context = "\n".join(context_parts)
-    
+
     # Inject into system prompt
     enriched_messages = list(messages)
     system_content = MEMORY_CONTEXT_TEMPLATE.format(memories=memory_context)
-    
+
     # Check if there's already a system message
     if enriched_messages and enriched_messages[0].role == "system":
         # Prepend memory context to existing system prompt
@@ -388,7 +403,89 @@ async def _enrich_with_memory(
             tool_calls=None,
             tool_call_id=None,
         ))
-    
+
+    return enriched_messages, info
+
+
+async def _enrich_with_swarm(
+    messages: list,
+    query: str,
+    user_id: str,
+    provider: str,
+    sensitivity_max: Optional[int],
+    info: ContextInjectionInfo,
+) -> tuple[list, ContextInjectionInfo]:
+    """Run the FULL_PIPELINE swarm task for chat enrichment."""
+    from closedclaw.api.agents.swarm import get_swarm
+    from closedclaw.api.agents.swarm.models import SwarmTask, SwarmTaskType
+
+    coordinator = get_swarm()
+
+    task = SwarmTask(
+        task_type=SwarmTaskType.FULL_PIPELINE,
+        user_id=user_id,
+        provider=provider,
+        input_data={"query": query, "sensitivity_max": sensitivity_max or 3},
+        context={"user_id": user_id, "provider": provider},
+    )
+
+    result = await coordinator.execute(task)
+
+    # Extract memories from swarm result output context
+    output = result.output or {}
+    memories = output.get("retrieved_memories", [])
+    info.memories_retrieved = len(memories)
+
+    # Check if governance permitted any
+    permitted = output.get("permitted_memories", memories)
+    info.memories_used = len(permitted)
+    info.memories_blocked = output.get("blocked_count", 0)
+    info.redactions_applied = output.get("redaction_count", 0)
+    info.memory_ids = [
+        m.get("id", "") if isinstance(m, dict) else getattr(m, "id", "")
+        for m in permitted
+    ]
+
+    if not permitted:
+        return messages, info
+
+    # Build context string from swarm-approved memories
+    context_parts = []
+    for m in permitted:
+        content = (
+            m.get("processed_content", m.get("content", m.get("memory", "")))
+            if isinstance(m, dict)
+            else getattr(m, "content", "")
+        )
+        tags = m.get("tags", []) if isinstance(m, dict) else getattr(m, "tags", [])
+        tags_str = f" [{', '.join(tags)}]" if tags else ""
+        context_parts.append(f"- {content}{tags_str}")
+
+    memory_context = "\n".join(context_parts)
+
+    enriched_messages = list(messages)
+    system_content = MEMORY_CONTEXT_TEMPLATE.format(memories=memory_context)
+
+    if enriched_messages and enriched_messages[0].role == "system":
+        original_system = enriched_messages[0].content or ""
+        enriched_messages[0] = ChatMessage(
+            role="system",
+            content=system_content + original_system,
+            name=None,
+            function_call=None,
+            tool_calls=None,
+            tool_call_id=None,
+        )
+    else:
+        enriched_messages.insert(0, ChatMessage(
+            role="system",
+            content=system_content,
+            name=None,
+            function_call=None,
+            tool_calls=None,
+            tool_call_id=None,
+        ))
+
     return enriched_messages, info
 
 
