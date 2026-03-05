@@ -113,8 +113,14 @@ services:
     container_name: closedclaw-openclaw-mcp
     environment:
       - USER=${USER_ID:-default-user}
-      - API_KEY=${OPENAI_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
+      # Ollama for LLM and embeddings
+      - LLM_PROVIDER=ollama
+      - LLM_MODEL=llama3.2:3b
+      - LLM_OLLAMA_BASE_URL=http://ollama:11434
+      - EMBEDDER_PROVIDER=ollama
+      - EMBEDDER_MODEL=nomic-embed-text
+      - EMBEDDER_OLLAMA_BASE_URL=http://ollama:11434
       # Route through control bridge for restricted services
       - CLOSEDCLAW_BRIDGE_URL=http://control-bridge:9000
       - CLOSEDCLAW_BRIDGE_ENABLED=true
@@ -134,6 +140,8 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+    ports:
+      - "${OPENMEMORY_MCP_PORT:-8766}:8765"
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
