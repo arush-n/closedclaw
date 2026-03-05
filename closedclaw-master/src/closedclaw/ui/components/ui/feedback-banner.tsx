@@ -7,6 +7,7 @@ interface FeedbackBannerProps {
   message: string;
   variant?: "success" | "error" | "info";
   onClose?: () => void;
+  onDismiss?: () => void;
 }
 
 const ICON_MAP = {
@@ -15,7 +16,8 @@ const ICON_MAP = {
   info: Info,
 };
 
-export function FeedbackBanner({ message, variant = "info", onClose }: FeedbackBannerProps) {
+export function FeedbackBanner({ message, variant = "info", onClose, onDismiss }: FeedbackBannerProps) {
+  const handleClose = onClose ?? onDismiss;
   const Icon = ICON_MAP[variant];
   const sharedClassName = cn(
     "rounded-xl border px-4 py-3 text-sm flex items-center justify-between gap-3 animate-fadeIn backdrop-blur-md",
@@ -30,10 +32,10 @@ export function FeedbackBanner({ message, variant = "info", onClose }: FeedbackB
         <Icon className="w-4 h-4 shrink-0" />
         <span>{message}</span>
       </div>
-      {onClose && (
+      {handleClose && (
         <button
           type="button"
-          onClick={onClose}
+          onClick={handleClose}
           className="p-1 rounded-lg hover:bg-white/[0.08] text-slate-400 hover:text-slate-200 transition-colors"
         >
           <X className="w-3.5 h-3.5" />

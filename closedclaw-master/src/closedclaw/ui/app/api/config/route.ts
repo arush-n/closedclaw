@@ -1,5 +1,7 @@
 import { closedclawRequest } from "../_lib/closedclaw";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   return closedclawRequest("/v1/config");
 }

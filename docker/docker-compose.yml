@@ -217,6 +217,37 @@ services:
       retries: 3
     restart: unless-stopped
 
+  # ---------------------------------------------------------------------------
+  # Closedclaw Dashboard — memory graph, audit, consent, policies UI
+  # ---------------------------------------------------------------------------
+  closedclaw-dashboard:
+    build:
+      context: ../closedclaw-master/src/closedclaw/ui/
+      dockerfile: ../../../../docker/closedclaw-dashboard/Dockerfile
+    image: closedclaw/dashboard:latest
+    container_name: closedclaw-dashboard
+    environment:
+      - PORT=3001
+      - HOSTNAME=0.0.0.0
+      - CLOSEDCLAW_API_URL=http://closedclaw-server:8765
+      - MEM0_API_URL=http://closedclaw-server:8765
+      - NEXT_PUBLIC_API_URL=http://localhost:${CLOSEDCLAW_DASHBOARD_PORT:-3001}/closedclaw-api
+      - OPENMEMORY_API_URL=http://openmemory-mcp:8765
+    ports:
+      - "${CLOSEDCLAW_DASHBOARD_PORT:-3001}:3001"
+    depends_on:
+      closedclaw-server:
+        condition: service_healthy
+    networks:
+      - closedclaw-net
+      - agent-net
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const h=require('http');h.get('http://localhost:3001',r=>{process.exit(r.statusCode<500?0:1)}).on('error',()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
 # ---------------------------------------------------------------------------
 # Networks
 # ---------------------------------------------------------------------------
