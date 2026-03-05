@@ -122,32 +122,81 @@ class Settings(BaseSettings):
     
     # LLM Provider settings
     provider: Literal["openai", "anthropic", "ollama", "groq", "together"] = Field(
-        default="openai", 
+        default="openai",
         description="Default LLM provider"
     )
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     openai_base_url: str = Field(
-        default="https://api.openai.com/v1", 
+        default="https://api.openai.com/v1",
         description="OpenAI API base URL"
     )
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
+    anthropic_base_url: str = Field(
+        default="https://api.anthropic.com",
+        description="Anthropic API base URL"
+    )
     ollama_base_url: str = Field(
-        default="http://localhost:11434", 
+        default="http://localhost:11434",
         description="Ollama server URL"
     )
     groq_api_key: Optional[str] = Field(default=None, description="Groq API key")
+    groq_base_url: str = Field(
+        default="https://api.groq.com/openai/v1",
+        description="Groq API base URL (OpenAI-compatible)"
+    )
     together_api_key: Optional[str] = Field(default=None, description="Together API key")
-    
+    together_base_url: str = Field(
+        default="https://api.together.xyz/v1",
+        description="Together API base URL (OpenAI-compatible)"
+    )
+
     # Default model configurations
     default_model: str = Field(default="gpt-4o-mini", description="Default model to use")
     embedding_model: str = Field(
-        default="text-embedding-3-small", 
+        default="text-embedding-3-small",
         description="Embedding model (cloud provider)"
     )
     local_model: str = Field(
-        default="llama3.2:latest", 
+        default="llama3.2:latest",
         description="Local Ollama model for privacy-sensitive operations"
     )
+
+    def get_effective_provider(self) -> str:
+        """Return the effective provider, falling back to ollama if no API key is set."""
+        # If explicitly set to ollama, use it
+        if self.provider == "ollama":
+            return "ollama"
+        # Check if the configured provider has an API key
+        key_map = {
+            "openai": self.openai_api_key,
+            "anthropic": self.anthropic_api_key,
+            "groq": self.groq_api_key,
+            "together": self.together_api_key,
+        }
+        if key_map.get(self.provider):
+            return self.provider
+        # No key for configured provider — try any provider that has a key
+        for prov, key in key_map.items():
+            if key:
+                return prov
+        # No cloud keys at all — fall back to ollama
+        return "ollama"
+
+    def get_effective_model(self) -> str:
+        """Return a model appropriate for the effective provider."""
+        effective = self.get_effective_provider()
+        # If the user explicitly set a model, keep it unless it's a mismatch
+        if effective == self.provider:
+            return self.default_model
+        # Provider changed via fallback — use sensible defaults
+        model_defaults = {
+            "openai": "gpt-4o-mini",
+            "anthropic": "claude-sonnet-4-5-20250514",
+            "groq": "llama-3.3-70b-versatile",
+            "together": "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+            "ollama": self.local_model,
+        }
+        return model_defaults.get(effective, self.default_model)
     
     # Local Engine Settings (nested config)
     local_engine: LocalEngineSettings = Field(

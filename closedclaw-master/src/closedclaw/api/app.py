@@ -85,11 +85,19 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Failed to install termination lock: %s", exc)
 
-    startup_info["provider"] = settings.provider
+    effective_provider = settings.get_effective_provider()
+    startup_info["provider"] = effective_provider
+    startup_info["configured_provider"] = settings.provider
     startup_info["local_engine"] = {"enabled": bool(settings.local_engine.enabled)}
 
     logger.info(f"Closedclaw initialized at {settings.closedclaw_dir}")
-    logger.info(f"Provider: {settings.provider}")
+    if effective_provider != settings.provider:
+        logger.info(
+            f"Provider: {effective_provider} (configured: {settings.provider}, "
+            f"no API key found — fell back to {effective_provider})"
+        )
+    else:
+        logger.info(f"Provider: {effective_provider}")
     logger.info(f"Memory DB: {settings.memory_db_path}")
 
     # Check local engine status

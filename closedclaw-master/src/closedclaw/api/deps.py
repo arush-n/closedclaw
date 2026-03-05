@@ -118,13 +118,18 @@ _mem0_cache_lock = threading.Lock()
 
 
 def _build_mem0_config(settings: Settings) -> dict[str, Any]:
-    """Build mem0 configuration from settings."""
+    """Build mem0 configuration from settings, using the effective provider."""
     global _mem0_config_cache_key, _mem0_config_cache_value
 
+    effective_provider = settings.get_effective_provider()
+
     cache_key = (
-        settings.provider,
+        effective_provider,
         str(settings.memory_db_path),
         settings.openai_api_key,
+        settings.anthropic_api_key,
+        settings.groq_api_key,
+        settings.together_api_key,
         settings.default_model,
         settings.embedding_model,
         settings.local_model,
@@ -141,34 +146,9 @@ def _build_mem0_config(settings: Settings) -> dict[str, Any]:
         "version": "v1.1",
         "history_db_path": str(settings.memory_db_path),
     }
-    
-    # Configure LLM provider
-    if settings.provider == "openai" and settings.openai_api_key:
-        config["llm"] = {
-            "provider": "openai",
-            "config": {
-                "api_key": settings.openai_api_key,
-                "model": settings.default_model,
-                "temperature": 0.2,
-            }
-        }
-        config["embedder"] = {
-            "provider": "openai",
-            "config": {
-                "api_key": settings.openai_api_key,
-                "model": settings.embedding_model,
-            }
-        }
-        config["vector_store"] = {
-            "provider": "qdrant",
-            "config": {
-                "host": settings.qdrant_host,
-                "port": settings.qdrant_port,
-                "collection_name": settings.qdrant_collection,
-                "embedding_model_dims": 1536,
-            }
-        }
-    elif settings.provider == "ollama":
+
+    if effective_provider == "ollama":
+        # Local Ollama — no API keys needed
         config["llm"] = {
             "provider": "ollama",
             "config": {
@@ -192,7 +172,72 @@ def _build_mem0_config(settings: Settings) -> dict[str, Any]:
                 "embedding_model_dims": 768,
             }
         }
-    
+    elif effective_provider == "openai":
+        config["llm"] = {
+            "provider": "openai",
+            "config": {
+                "api_key": settings.openai_api_key,
+                "model": settings.get_effective_model(),
+                "temperature": 0.2,
+            }
+        }
+        config["embedder"] = {
+            "provider": "openai",
+            "config": {
+                "api_key": settings.openai_api_key,
+                "model": settings.embedding_model,
+            }
+        }
+        config["vector_store"] = {
+            "provider": "qdrant",
+            "config": {
+                "host": settings.qdrant_host,
+                "port": settings.qdrant_port,
+                "collection_name": settings.qdrant_collection,
+                "embedding_model_dims": 1536,
+            }
+        }
+    else:
+        # Groq, Together, Anthropic — these are OpenAI-compatible for mem0
+        # mem0 uses litellm under the hood, so we pass provider-prefixed model names
+        key_map = {
+            "anthropic": settings.anthropic_api_key,
+            "groq": settings.groq_api_key,
+            "together": settings.together_api_key,
+        }
+        api_key = key_map.get(effective_provider, "")
+        model = settings.get_effective_model()
+
+        # For mem0's litellm integration, prefix model with provider name
+        litellm_model = f"{effective_provider}/{model}" if "/" not in model else model
+
+        config["llm"] = {
+            "provider": "litellm",
+            "config": {
+                "model": litellm_model,
+                "api_key": api_key,
+                "temperature": 0.2,
+            }
+        }
+        # Embeddings: fall back to Ollama for local embeddings (most reliable)
+        # since not all providers offer embedding APIs
+        config["embedder"] = {
+            "provider": "ollama",
+            "config": {
+                "model": "nomic-embed-text",
+                "ollama_base_url": settings.ollama_base_url,
+            }
+        }
+        config["vector_store"] = {
+            "provider": "qdrant",
+            "config": {
+                "host": settings.qdrant_host,
+                "port": settings.qdrant_port,
+                "collection_name": settings.qdrant_collection,
+                "embedding_model_dims": 768,
+            }
+        }
+
     with _mem0_cache_lock:
         _mem0_config_cache_key = cache_key
         _mem0_config_cache_value = config

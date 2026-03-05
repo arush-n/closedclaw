@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
+COPY closedclaw_middleware.py .
+COPY mcp_services/ ./mcp_services/
 
 # Config is mounted as a volume
 VOLUME ["/config", "/data"]

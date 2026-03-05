@@ -26,7 +26,11 @@
       "Bash(docker compose build control-bridge)",
       "Bash(curl -s http://localhost:6333/)",
       "Bash(curl -s http://localhost:6333/healthz)",
-      "Bash(curl -s http://localhost:6333/health)"
+      "Bash(curl -s http://localhost:6333/health)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx|js\\)$\")",
+      "Bash(grep -n \"return None\\\\|return {}\\\\|return \\\\[\\\\]\\\\|pass\\\\s*$\\\\|raise\\\\|NotImplemented\" /c/Users/nandy/closedclaw/closedclaw-master/src/closedclaw/api/privacy/firewall.py)",
+      "Bash(grep -n \"return None\\\\|return {}\\\\|return \\\\[\\\\]\\\\|pass\\\\s*$\" /c/Users/nandy/closedclaw/closedclaw-master/src/closedclaw/api/core/memory.py)",
+      "Bash(xargs grep -l \"PrivacyFirewall\\\\|firewall\\\\.process\")"
     ]
   }
 }

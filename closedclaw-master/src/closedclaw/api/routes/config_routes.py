@@ -56,9 +56,14 @@ class ConfigUpdate(BaseModel):
     provider: str | None = None
     default_model: str | None = None
     openai_api_key: str | None = None
+    openai_base_url: str | None = None
     anthropic_api_key: str | None = None
+    anthropic_base_url: str | None = None
     groq_api_key: str | None = None
+    groq_base_url: str | None = None
     together_api_key: str | None = None
+    together_base_url: str | None = None
+    ollama_base_url: str | None = None
     default_sensitivity: int | None = None
     require_consent_level: int | None = None
     enable_redaction: bool | None = None

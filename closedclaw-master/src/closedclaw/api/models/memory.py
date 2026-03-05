@@ -31,6 +31,7 @@ class MemoryCreate(MemoryBase):
     """Schema for creating a new memory."""
     user_id: Optional[str] = Field(default="default", description="User identifier")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="Additional metadata")
+    consent_given: bool = Field(default=False, description="Explicit consent for storing sensitive content")
 
 
 class MemoryUpdate(BaseModel):

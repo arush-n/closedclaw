@@ -47,6 +47,8 @@ CLOSEDCLAW_HOST_URL = os.getenv(
 OPENCLAW_INTERNAL_URL = os.getenv(
     "OPENCLAW_INTERNAL_URL", "http://openmemory-mcp:8766"
 )
+ACTIVE_PROVIDER = os.getenv("CLOSEDCLAW_PROVIDER", "ollama")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
 _config: dict = {}
 _http: Optional[httpx.AsyncClient] = None
@@ -581,7 +583,7 @@ async def get_recent_audit(limit: int = 50):
     """Return recent audit log entries."""
     if limit > 500:
         limit = 500
-    
+
     today_file = AUDIT_DIR / f"bridge_{time.strftime('%Y%m%d')}.jsonl"
     entries = []
     if today_file.exists():
@@ -593,5 +595,156 @@ async def get_recent_audit(limit: int = 50):
                         entries.append(json.loads(line))
                     except json.JSONDecodeError:
                         pass
-    
+
     return {"entries": entries[-limit:], "total": len(entries)}
+
+
+# ---------------------------------------------------------------------------
+# LLM Request Interception — tracks all LLM API calls from Docker agents
+# ---------------------------------------------------------------------------
+
+class LLMInterceptRequest(BaseModel):
+    """Intercept an LLM call flowing through the Docker network."""
+    provider: str = ""
+    model: str = ""
+    messages: list[dict[str, Any]] = []
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    stream: bool = False
+    user_id: str = "default-user"
+    source: str = "openclaw"
+    metadata: dict[str, Any] = {}
+
+
+@app.post("/llm/intercept")
+async def intercept_llm_request(request: LLMInterceptRequest):
+    """Intercept and audit an LLM API call before it reaches the provider.
+
+    Docker agents should route LLM calls through here so closedclaw can:
+    1. Log the call to the audit trail
+    2. Screen message content via memory guardian
+    3. Enforce provider/model restrictions
+    4. Forward to the actual LLM provider
+    """
+    provider = request.provider or ACTIVE_PROVIDER
+
+    # Screen message content for dangerous patterns
+    combined_content = " ".join(
+        m.get("content", "") for m in request.messages if m.get("content")
+    )
+    action, category, detail = check_memory_content(combined_content)
+
+    _audit_log("llm_request", {
+        "provider": provider,
+        "model": request.model,
+        "source": request.source,
+        "user_id": request.user_id,
+        "message_count": len(request.messages),
+        "content_action": action,
+        "content_category": category,
+        "stream": request.stream,
+    })
+
+    if action == "block":
+        return {
+            "status": "blocked",
+            "reason": detail,
+            "category": category,
+        }
+
+    if action == "redact_and_store":
+        for msg in request.messages:
+            if msg.get("content"):
+                msg["content"] = redact_memory_content(msg["content"])
+
+    # Forward to closedclaw's proxy for actual LLM execution with full governance
+    try:
+        payload = {
+            "model": request.model,
+            "messages": request.messages,
+            "stream": request.stream,
+        }
+        if request.temperature is not None:
+            payload["temperature"] = request.temperature
+        if request.max_tokens is not None:
+            payload["max_tokens"] = request.max_tokens
+
+        resp = await _http.post(
+            f"{CLOSEDCLAW_HOST_URL}/v1/chat/completions",
+            json=payload,
+            headers={"X-User-ID": request.user_id},
+            timeout=120.0,
+        )
+
+        _audit_log("llm_response", {
+            "provider": provider,
+            "model": request.model,
+            "status_code": resp.status_code,
+            "source": request.source,
+        })
+
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            return {"status": "error", "detail": resp.text[:500]}
+    except httpx.RequestError as exc:
+        logger.error("LLM intercept forward failed: %s", exc)
+        return {"status": "error", "detail": str(exc)}
+
+
+@app.get("/llm/provider")
+async def get_active_provider():
+    """Return the currently active LLM provider and its configuration."""
+    return {
+        "provider": ACTIVE_PROVIDER,
+        "ollama_url": OLLAMA_BASE_URL,
+        "closedclaw_proxy": f"{CLOSEDCLAW_HOST_URL}/v1/chat/completions",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Request tracking middleware — logs ALL requests flowing through the bridge
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def track_all_requests(request: Request, call_next):
+    """Log every request that passes through the bridge for full visibility."""
+    start = time.time()
+    path = request.url.path
+    method = request.method
+    client_ip = request.client.host if request.client else "unknown"
+
+    response = await call_next(request)
+
+    duration_ms = round((time.time() - start) * 1000, 1)
+
+    # Only audit non-health, non-config reads (reduce noise)
+    if path not in ("/health", "/docs", "/openapi.json"):
+        _audit_log("http_request", {
+            "method": method,
+            "path": path,
+            "client_ip": client_ip,
+            "status": response.status_code,
+            "duration_ms": duration_ms,
+        })
+
+    # Forward significant events to closedclaw's centralized audit
+    if path.startswith(("/mcp/", "/proxy/", "/memory/", "/llm/")):
+        try:
+            await _http.post(
+                f"{CLOSEDCLAW_HOST_URL}/v1/bridge/audit",
+                json={
+                    "event_type": f"bridge.{method.lower()}.{path.strip('/').replace('/', '.')}",
+                    "source": "control_bridge",
+                    "details": {
+                        "client_ip": client_ip,
+                        "status": response.status_code,
+                        "duration_ms": duration_ms,
+                    },
+                },
+                timeout=5.0,
+            )
+        except Exception:
+            pass  # Best-effort forwarding
+
+    return response

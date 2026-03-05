@@ -86,6 +86,11 @@ class ShutdownRequest(BaseModel):
     password: str = Field(..., description="Shutdown password")
 
 
+class SetPasswordRequest(BaseModel):
+    current_password: str = Field(..., description="Current shutdown password (or empty on first setup)")
+    new_password: str = Field(..., min_length=8, description="New shutdown password (min 8 chars)")
+
+
 # ── Addon Session Dependency ─────────────────────────────────────────
 
 async def require_addon_session(
@@ -339,6 +344,58 @@ async def addon_status(
     }
 
 
+# ── Docker Network Guard ─────────────────────────────────────────────
+
+# Docker bridge networks typically use 172.16-31.x.x or 192.168.x.x ranges.
+# Block these from admin endpoints so agents running inside Docker cannot
+# reach shutdown or password-change routes.
+_DOCKER_PREFIXES = ("172.16.", "172.17.", "172.18.", "172.19.", "172.2", "172.3",
+                     "192.168.", "10.")
+
+def _reject_docker_origin(request: Request) -> None:
+    """Raise 403 if the request originates from a Docker-internal IP."""
+    import os
+    if os.environ.get("CLOSEDCLAW_ALLOW_INTERNAL_ADMIN") == "1":
+        return  # Escape hatch for testing
+    client_ip = request.client.host if request.client else ""
+    if any(client_ip.startswith(p) for p in _DOCKER_PREFIXES):
+        logger.warning("Blocked admin request from Docker-internal IP %s", client_ip)
+        raise HTTPException(status_code=403, detail="Admin endpoints are not accessible from internal services")
+
+
+# ── Server Password Management ───────────────────────────────────────
+
+
+@router.put("/server/password")
+async def set_server_password(
+    req: SetPasswordRequest,
+    request: Request,
+    token: str = Depends(get_auth_token),
+):
+    """Set or change the shutdown password.
+
+    On first setup, current_password can be the auto-generated password shown in logs.
+    Requires a valid auth token. Blocked from Docker-internal networks.
+    """
+    _reject_docker_origin(request)
+    from closedclaw.api.core.termination_lock import get_termination_lock
+
+    lock = get_termination_lock()
+
+    # Verify current password first (unless this is first-time setup with no key file)
+    if not lock.unlock(req.current_password):
+        # Re-lock since unlock failed
+        lock._locked = True
+        raise HTTPException(status_code=403, detail="Current password is incorrect")
+
+    # Re-lock after verification
+    lock._locked = True
+
+    # Set the new password
+    lock.set_password(req.new_password)
+    return {"status": "password_updated"}
+
+
 # ── Server Shutdown ──────────────────────────────────────────────────
 
 _shutdown_attempts: dict[str, list[float]] = {}
@@ -356,7 +413,9 @@ async def server_shutdown(
 
     Requires both a valid auth token AND the shutdown password.
     Rate-limited to prevent brute-force attacks.
+    Blocked from Docker-internal networks.
     """
+    _reject_docker_origin(request)
     import time
 
     client_ip = request.client.host if request.client else "unknown"

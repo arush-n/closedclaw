@@ -29,6 +29,7 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - closedclaw-net
+      - agent-net
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
     healthcheck:
@@ -56,6 +57,7 @@ services:
       - mem0_storage:/qdrant/storage
     networks:
       - closedclaw-net
+      - agent-net
     healthcheck:
       test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/6333'"]
       interval: 10s
@@ -85,7 +87,11 @@ services:
       - CLOSEDCLAW_LOCAL_ENGINE_LLM_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
       # Provider config — use ollama for local-only operation
       - CLOSEDCLAW_PROVIDER=${CLOSEDCLAW_PROVIDER:-ollama}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CLOSEDCLAW_DEFAULT_MODEL=${CLOSEDCLAW_DEFAULT_MODEL:-}
+      - CLOSEDCLAW_OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - CLOSEDCLAW_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLOSEDCLAW_GROQ_API_KEY=${GROQ_API_KEY:-}
+      - CLOSEDCLAW_TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
     volumes:
       - ./config:/config:ro
       - closedclaw_data:/data
@@ -107,19 +113,24 @@ services:
 
   # ---------------------------------------------------------------------------
   # Openclaw MCP Server (OpenMemory API)
+  # On agent-net only — cannot reach closedclaw dashboard or shutdown endpoint
   # ---------------------------------------------------------------------------
   openmemory-mcp:
     image: mem0/openmemory-mcp
     container_name: closedclaw-openclaw-mcp
     environment:
       - USER=${USER_ID:-default-user}
+      # Provider API keys — all passed through, system auto-selects
       - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-placeholder}
-      # Ollama for LLM and embeddings
-      - LLM_PROVIDER=ollama
-      - LLM_MODEL=llama3.2:3b
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      # LLM and embedding config — defaults to Ollama (local)
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - LLM_MODEL=${LLM_MODEL:-llama3.2:3b}
       - LLM_OLLAMA_BASE_URL=http://ollama:11434
-      - EMBEDDER_PROVIDER=ollama
-      - EMBEDDER_MODEL=nomic-embed-text
+      - EMBEDDER_PROVIDER=${EMBEDDER_PROVIDER:-ollama}
+      - EMBEDDER_MODEL=${EMBEDDER_MODEL:-nomic-embed-text}
       - EMBEDDER_OLLAMA_BASE_URL=http://ollama:11434
       # Route through control bridge for restricted services
       - CLOSEDCLAW_BRIDGE_URL=http://control-bridge:9000
@@ -134,7 +145,7 @@ services:
     volumes:
       - ./config/openclaw.yaml:/usr/src/openmemory/closedclaw_config.yaml:ro
     networks:
-      - closedclaw-net
+      - agent-net
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8765/docs', timeout=5)\""]
       interval: 15s
@@ -146,6 +157,7 @@ services:
 
   # ---------------------------------------------------------------------------
   # Openclaw Dashboard (OpenMemory UI)
+  # On agent-net only — can reach MCP but not closedclaw-server directly
   # ---------------------------------------------------------------------------
   openmemory-ui:
     image: mem0/openmemory-ui:latest
@@ -160,11 +172,13 @@ services:
       openmemory-mcp:
         condition: service_started
     networks:
-      - closedclaw-net
+      - agent-net
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
   # Closedclaw Control Bridge
+  # On agent-net only — agents access closedclaw-server via bridge, not directly.
+  # The bridge has a restricted API surface — no shutdown or password endpoints.
   # ---------------------------------------------------------------------------
   control-bridge:
     build:
@@ -174,11 +188,14 @@ services:
     container_name: closedclaw-bridge
     environment:
       - BRIDGE_LOG_LEVEL=${BRIDGE_LOG_LEVEL:-INFO}
-      # Point to closedclaw-server container instead of host.docker.internal
+      # Bridge connects to closedclaw-server via the shared closedclaw-net
       - CLOSEDCLAW_HOST_URL=http://closedclaw-server:8765
       - OPENCLAW_INTERNAL_URL=http://openmemory-mcp:8765
       - BRIDGE_CONFIG_PATH=/config/closedclaw.yaml
       - OPENCLAW_CONFIG_PATH=/config/openclaw.yaml
+      # Provider awareness — bridge tracks which provider is in use
+      - CLOSEDCLAW_PROVIDER=${CLOSEDCLAW_PROVIDER:-ollama}
+      - OLLAMA_BASE_URL=http://ollama:11434
       # MCP service credentials
       - GOOGLE_OAUTH_TOKEN=${GOOGLE_OAUTH_TOKEN:-}
       - NOTION_API_KEY=${NOTION_API_KEY:-}
@@ -189,6 +206,7 @@ services:
       - bridge_data:/data
     networks:
       - closedclaw-net
+      - agent-net
     depends_on:
       closedclaw-server:
         condition: service_healthy
@@ -206,6 +224,9 @@ networks:
   closedclaw-net:
     driver: bridge
     name: closedclaw-network
+  agent-net:
+    driver: bridge
+    name: closedclaw-agent-network
 
 # ---------------------------------------------------------------------------
 # Volumes

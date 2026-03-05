@@ -89,8 +89,23 @@ async def add_memory(
             source=memory_create.source,
             expires_at=memory_create.expires_at,
             metadata=memory_create.metadata,
+            consent_given=memory_create.consent_given,
         )
-        
+
+        # Consent gate — memory was not stored, return classification info
+        if result.get("consent_required") and result.get("result") is None:
+            raise HTTPException(
+                status_code=451,  # Unavailable For Legal Reasons
+                detail={
+                    "error": "consent_required",
+                    "message": "This memory contains sensitive content and requires explicit consent before storage.",
+                    "sensitivity": result["sensitivity"],
+                    "classification": result.get("classification"),
+                    "content_hash": result.get("content_hash"),
+                    "hint": "Resubmit with consent_given=true after user approval.",
+                },
+            )
+
         # Get the created memory
         results_list = result.get("result", {}).get("results", [])
         mem_result = results_list[0] if results_list else {}

@@ -84,11 +84,31 @@ def _serialize_messages(messages: list) -> list[dict]:
 
 def _resolve_provider_endpoint(settings: Settings, api_key: Optional[str]) -> tuple[str, dict]:
     """Resolve upstream base URL and auth headers for current provider."""
-    if settings.provider == "openai" or (api_key and api_key.startswith("sk-")):
-        return settings.openai_base_url.rstrip("/"), {"Authorization": f"Bearer {api_key}"}
-    if settings.provider == "ollama":
+    provider = settings.get_effective_provider()
+
+    if provider == "ollama":
         return f"{settings.ollama_base_url}/v1", {}
-    return settings.openai_base_url.rstrip("/"), ({"Authorization": f"Bearer {api_key}"} if api_key else {})
+
+    if provider == "anthropic":
+        return settings.anthropic_base_url.rstrip("/") + "/v1", {
+            "x-api-key": api_key or "",
+            "anthropic-version": "2023-06-01",
+        }
+
+    if provider == "groq":
+        return settings.groq_base_url.rstrip("/"), {
+            "Authorization": f"Bearer {api_key}" if api_key else "",
+        }
+
+    if provider == "together":
+        return settings.together_base_url.rstrip("/"), {
+            "Authorization": f"Bearer {api_key}" if api_key else "",
+        }
+
+    # openai (default) or key-prefix detection
+    return settings.openai_base_url.rstrip("/"), (
+        {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    )
 
 
 async def _run_writeback_policy(
@@ -186,18 +206,20 @@ async def chat_completions(
         raw_request.headers.get("X-Closedclaw-Disable-Memory", "").lower() == "true"
     )
     
+    # Resolve effective provider (auto-falls back to ollama if no keys)
+    effective_provider = settings.get_effective_provider()
+
     # Get API key for provider
     api_key = token
     if not api_key or api_key == settings.get_or_create_token():
         # Use configured provider key
-        if settings.provider == "openai":
-            api_key = settings.openai_api_key
-        elif settings.provider == "anthropic":
-            api_key = settings.anthropic_api_key
-        elif settings.provider == "groq":
-            api_key = settings.groq_api_key
-        elif settings.provider == "together":
-            api_key = settings.together_api_key
+        key_map = {
+            "openai": settings.openai_api_key,
+            "anthropic": settings.anthropic_api_key,
+            "groq": settings.groq_api_key,
+            "together": settings.together_api_key,
+        }
+        api_key = key_map.get(effective_provider)
     
     # Enrich with memory context
     enriched_messages = request.messages
@@ -207,7 +229,7 @@ async def chat_completions(
             enriched_messages, context_info = await _enrich_with_memory(
                 messages=request.messages,
                 user_id=user_id,
-                provider=settings.provider,
+                provider=effective_provider,
                 memory=memory,
                 policy_engine=policy_engine,
                 sensitivity_max=request.closedclaw_sensitivity_max,
@@ -218,14 +240,14 @@ async def chat_completions(
                 exc_info=True,
             )
     
-    context_info.provider_used = settings.provider
+    context_info.provider_used = effective_provider
 
     # Validate API key exists for cloud providers (after enrichment so privacy pipeline still runs)
-    if settings.provider != "ollama" and not api_key:
+    if effective_provider != "ollama" and not api_key:
         raise HTTPException(
             status_code=502,
-            detail=f"No API key configured for provider '{settings.provider}'. "
-                   f"Set it via: closedclaw config set {settings.provider}_api_key <key>"
+            detail=f"No API key configured for provider '{effective_provider}'. "
+                   f"Set it via: closedclaw config set {effective_provider}_api_key <key>"
         )
     
     # Build the request for the upstream provider
@@ -500,6 +522,7 @@ async def _handle_sync_request(
     user_id: str,
 ) -> ChatCompletionResponse:
     """Handle non-streaming request."""
+    effective_provider = settings.get_effective_provider()
     
     # Build request payload
     payload = {
@@ -575,7 +598,7 @@ async def _handle_sync_request(
         from closedclaw.api.routes.audit import add_audit_entry
         audit_entry = add_audit_entry(
             request_id=request_id,
-            provider=settings.provider,
+            provider=effective_provider,
             model=request.model,
             memories_retrieved=context_info.memories_retrieved,
             memories_used=context_info.memories_used,
@@ -597,7 +620,7 @@ async def _handle_sync_request(
         task = asyncio.create_task(_run_writeback_policy(
             memory=memory,
             user_id=user_id,
-            provider=settings.provider,
+            provider=effective_provider,
             messages=request.messages,
             assistant_response=assistant_text,
         ))
@@ -605,7 +628,7 @@ async def _handle_sync_request(
         task.add_done_callback(_BACKGROUND_TASKS.discard)
     except Exception as e:
         logger.warning(f"Writeback scheduling failed: {e}")
-    
+
     return completion_response
 
 
@@ -620,7 +643,8 @@ async def _handle_streaming_request(
     user_id: str,
 ):
     """Handle streaming request."""
-    
+    effective_provider = settings.get_effective_provider()
+
     # Build request payload
     payload = {
         "model": request.model,
@@ -684,7 +708,7 @@ async def _handle_streaming_request(
                 from closedclaw.api.routes.audit import add_audit_entry
                 add_audit_entry(
                     request_id=request_id,
-                    provider=settings.provider,
+                    provider=effective_provider,
                     model=request.model,
                     memories_retrieved=context_info.memories_retrieved,
                     memories_used=context_info.memories_used,
@@ -701,7 +725,7 @@ async def _handle_streaming_request(
                 task = asyncio.create_task(_run_writeback_policy(
                     memory=memory,
                     user_id=user_id,
-                    provider=settings.provider,
+                    provider=effective_provider,
                     messages=request.messages,
                     assistant_response=assistant_text,
                 ))
@@ -729,18 +753,38 @@ async def list_models(
 ):
     """List available models (OpenAI-compatible)."""
     
-    # Default models based on provider
+    # Default models based on effective provider
     models = []
-    
-    if settings.provider == "openai":
+    provider = settings.get_effective_provider()
+    ts = int(time.time())
+
+    if provider == "openai":
         models = [
-            ModelInfo(id="gpt-4o", created=1699999999, owned_by="openai"),
-            ModelInfo(id="gpt-4o-mini", created=1699999999, owned_by="openai"),
-            ModelInfo(id="gpt-4-turbo", created=1699999999, owned_by="openai"),
-            ModelInfo(id="gpt-3.5-turbo", created=1699999999, owned_by="openai"),
+            ModelInfo(id="gpt-4o", created=ts, owned_by="openai"),
+            ModelInfo(id="gpt-4o-mini", created=ts, owned_by="openai"),
+            ModelInfo(id="gpt-4-turbo", created=ts, owned_by="openai"),
+            ModelInfo(id="gpt-3.5-turbo", created=ts, owned_by="openai"),
         ]
-    elif settings.provider == "ollama":
-        # Try to fetch from Ollama
+    elif provider == "anthropic":
+        models = [
+            ModelInfo(id="claude-opus-4-6", created=ts, owned_by="anthropic"),
+            ModelInfo(id="claude-sonnet-4-5-20250514", created=ts, owned_by="anthropic"),
+            ModelInfo(id="claude-haiku-4-5-20251001", created=ts, owned_by="anthropic"),
+        ]
+    elif provider == "groq":
+        models = [
+            ModelInfo(id="llama-3.3-70b-versatile", created=ts, owned_by="groq"),
+            ModelInfo(id="llama-3.1-8b-instant", created=ts, owned_by="groq"),
+            ModelInfo(id="mixtral-8x7b-32768", created=ts, owned_by="groq"),
+            ModelInfo(id="gemma2-9b-it", created=ts, owned_by="groq"),
+        ]
+    elif provider == "together":
+        models = [
+            ModelInfo(id="meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", created=ts, owned_by="together"),
+            ModelInfo(id="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo", created=ts, owned_by="together"),
+            ModelInfo(id="mistralai/Mixtral-8x7B-Instruct-v0.1", created=ts, owned_by="together"),
+        ]
+    elif provider == "ollama":
         try:
             client = _get_http_client()
             response = await client.get(f"{settings.ollama_base_url}/api/tags")
@@ -749,12 +793,12 @@ async def list_models(
                 for model in data.get("models", []):
                     models.append(ModelInfo(
                         id=model.get("name", ""),
-                        created=int(time.time()),
+                        created=ts,
                         owned_by="ollama",
                     ))
         except Exception:
             models = [
-                ModelInfo(id=settings.local_model, created=int(time.time()), owned_by="ollama"),
+                ModelInfo(id=settings.local_model, created=ts, owned_by="ollama"),
             ]
-    
+
     return ModelListResponse(data=models)
