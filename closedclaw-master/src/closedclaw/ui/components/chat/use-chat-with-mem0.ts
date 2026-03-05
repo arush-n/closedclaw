@@ -93,12 +93,17 @@ export function useChatWithClosedclaw({
         }
 
         const data = await response.json();
+        // ClawdBot API returns {message: {role, content}, tool_calls, iterations, ...}
+        const content =
+          typeof data.message === "object"
+            ? data.message?.content ?? ""
+            : data.message ?? data.response ?? "";
         return {
-          response: data.response || data.message || "",
+          response: content,
           metadata: {
-            closedclaw_memories_used: data.tools_used?.length ?? 0,
+            closedclaw_memories_used: data.tool_calls?.length ?? 0,
             closedclaw_redactions_applied: 0,
-            closedclaw_audit_id: data.audit_id,
+            closedclaw_audit_id: data.conversation_id,
           },
         };
       }

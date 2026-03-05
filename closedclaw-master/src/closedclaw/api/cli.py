@@ -4,6 +4,7 @@ Closedclaw CLI Entry Point
 Command-line interface for managing closedclaw.
 """
 
+import subprocess
 import sys
 import socket
 from pathlib import Path
@@ -28,6 +29,49 @@ app = typer.Typer(
     no_args_is_help=True,
 )
 console = Console()
+
+
+def _start_dashboard(api_host: str, api_port: int) -> Optional[subprocess.Popen]:
+    """Start the Next.js dashboard dev server, proxied through the API at /app."""
+    import os as _os
+
+    ui_dir = Path(__file__).resolve().parent.parent / "ui"
+    if not (ui_dir / "package.json").exists():
+        console.print("[dim]Dashboard UI not found, skipping.[/]")
+        return None
+
+    # Internal port for Next.js (not exposed directly)
+    dash_port = api_port + 100
+    if _is_port_in_use(api_host, dash_port):
+        console.print(f"[dim]Dashboard internal port {dash_port} in use — dashboard may already be running.[/]")
+        return None
+
+    # Set env var so FastAPI knows to proxy /app to this port
+    _os.environ["CLOSEDCLAW_DASHBOARD_PORT"] = str(dash_port)
+
+    env = {
+        **dict(_os.environ),
+        "PORT": str(dash_port),
+        "CLOSEDCLAW_API_URL": f"http://{api_host}:{api_port}",
+    }
+
+    try:
+        proc = subprocess.Popen(
+            ["npm", "run", "dev"],
+            cwd=str(ui_dir),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            shell=True,
+        )
+        console.print(f"[green]Dashboard:[/] http://{api_host}:{api_port}/app")
+        return proc
+    except FileNotFoundError:
+        console.print("[yellow]npm not found — skipping dashboard.[/]")
+        return None
+    except Exception as e:
+        console.print(f"[yellow]Failed to start dashboard: {e}[/]")
+        return None
 
 
 def _is_port_in_use(host: str, port: int) -> bool:
@@ -115,6 +159,9 @@ def serve(
     if demo:
         _load_demo_data()
     
+    # Start dashboard (Next.js dev server) alongside the API
+    dashboard_proc = _start_dashboard(host, port)
+
     # Run server
     from closedclaw.api.app import run_server
     log_level = "debug" if debug else "info"
@@ -125,6 +172,9 @@ def serve(
         raise typer.Exit(code=0)
     except Exception as exc:
         _print_startup_hints(exc, host=host, port=port, reload=reload)
+    finally:
+        if dashboard_proc and dashboard_proc.poll() is None:
+            dashboard_proc.terminate()
         raise typer.Exit(code=1)
 
 
@@ -467,24 +517,39 @@ def version():
 
 
 def _load_demo_data():
-    """Load demo data into memory."""
+    """Load comprehensive demo data into memory, audit log, and consent queue."""
     console.print("[dim]Loading demo data...[/]")
-    
+
     from closedclaw.api.core.memory import get_memory_instance
-    
+
     memory = get_memory_instance()
-    
+
+    # ── Memories across all sensitivity levels, tags, and sources ──
     demo_memories = [
-        {
-            "content": "User's name is Alex and they work as a software engineer.",
-            "sensitivity": 1,
-            "tags": ["personal", "work"],
-            "source": "conversation",
-        },
+        # Level 0 — public / non-sensitive
         {
             "content": "User prefers dark mode and uses VS Code as their primary editor.",
             "sensitivity": 0,
             "tags": ["preferences", "tools"],
+            "source": "conversation",
+        },
+        {
+            "content": "User's favourite programming language is Python, followed by TypeScript.",
+            "sensitivity": 0,
+            "tags": ["preferences", "work"],
+            "source": "conversation",
+        },
+        {
+            "content": "User likes to listen to lo-fi music while coding.",
+            "sensitivity": 0,
+            "tags": ["preferences", "lifestyle"],
+            "source": "conversation",
+        },
+        # Level 1 — general personal
+        {
+            "content": "User's name is Alex and they work as a software engineer at a startup in Austin.",
+            "sensitivity": 1,
+            "tags": ["personal", "work"],
             "source": "conversation",
         },
         {
@@ -494,26 +559,163 @@ def _load_demo_data():
             "source": "conversation",
         },
         {
-            "content": "User has been experiencing stress about work deadlines.",
+            "content": "User's dog is named Pixel — a golden retriever.",
+            "sensitivity": 1,
+            "tags": ["personal", "pets"],
+            "source": "conversation",
+        },
+        {
+            "content": "User recently started learning Rust for systems programming.",
+            "sensitivity": 1,
+            "tags": ["learning", "work"],
+            "source": "conversation",
+        },
+        {
+            "content": "User commutes by bicycle and values sustainability.",
+            "sensitivity": 1,
+            "tags": ["lifestyle", "preferences"],
+            "source": "conversation",
+        },
+        # Level 2 — personal / sensitive
+        {
+            "content": "User has been experiencing stress about work deadlines and considering therapy.",
             "sensitivity": 2,
             "tags": ["health", "work"],
             "source": "conversation",
         },
         {
-            "content": "User's home address is 123 Privacy Lane, Austin TX.",
+            "content": "User earns approximately $145,000 per year before taxes.",
+            "sensitivity": 2,
+            "tags": ["finance", "work"],
+            "source": "conversation",
+        },
+        {
+            "content": "User had a disagreement with their manager about project priorities last week.",
+            "sensitivity": 2,
+            "tags": ["work", "relationships"],
+            "source": "conversation",
+        },
+        {
+            "content": "User is saving for a down-payment on a house — targeting $80k by end of year.",
+            "sensitivity": 2,
+            "tags": ["finance", "goals"],
+            "source": "manual",
+        },
+        # Level 3 — highly sensitive / consent-gated
+        {
+            "content": "User's home address is 123 Privacy Lane, Austin TX 78701.",
             "sensitivity": 3,
             "tags": ["personal", "address"],
             "source": "manual",
         },
+        {
+            "content": "User's SSN ends in 4829.",
+            "sensitivity": 3,
+            "tags": ["personal", "identity"],
+            "source": "manual",
+        },
+        {
+            "content": "User takes sertraline 50mg daily for anxiety — prescribed Jan 2025.",
+            "sensitivity": 3,
+            "tags": ["health", "medication"],
+            "source": "conversation",
+        },
+        {
+            "content": "User's bank account number at First National is 98-7654321.",
+            "sensitivity": 3,
+            "tags": ["finance", "banking"],
+            "source": "manual",
+        },
+        # Insight-friendly — recurring topics and mild contradictions
+        {
+            "content": "User mentioned wanting to travel to Japan in spring 2026.",
+            "sensitivity": 1,
+            "tags": ["goals", "travel"],
+            "source": "conversation",
+        },
+        {
+            "content": "User said they don't want to take any vacation until the project ships.",
+            "sensitivity": 1,
+            "tags": ["work", "travel"],
+            "source": "conversation",
+        },
+        {
+            "content": "User enjoys reading sci-fi novels, especially Asimov and Le Guin.",
+            "sensitivity": 0,
+            "tags": ["preferences", "books"],
+            "source": "conversation",
+        },
+        {
+            "content": "User's partner's name is Jordan. They've been together for three years.",
+            "sensitivity": 2,
+            "tags": ["personal", "relationships"],
+            "source": "conversation",
+        },
     ]
-    
+
+    added = 0
     for mem in demo_memories:
         try:
             memory.add(**mem)
+            added += 1
         except Exception as e:
             console.print(f"[yellow]Warning: Could not add demo memory: {e}[/]")
-    
-    console.print(f"[green]✓[/] Loaded {len(demo_memories)} demo memories")
+
+    console.print(f"[green]✓[/] Loaded {added}/{len(demo_memories)} demo memories")
+
+    # ── Pre-populate audit entries ──
+    try:
+        from closedclaw.api.routes.audit import add_audit_entry
+
+        add_audit_entry(
+            request_id="demo-proxy-001",
+            provider="openai",
+            model="gpt-4o",
+            memories_used=3,
+            memory_ids=["demo-1", "demo-2", "demo-3"],
+            redactions_applied=1,
+            consent_required=False,
+            query_summary="Tell me about my work projects",
+        )
+        add_audit_entry(
+            request_id="demo-proxy-002",
+            provider="ollama",
+            model="llama3",
+            memories_used=2,
+            memory_ids=["demo-4", "demo-5"],
+            redactions_applied=0,
+            consent_required=True,
+            consent_receipt_id="demo-receipt-001",
+            query_summary="What are my health notes?",
+        )
+        add_audit_entry(
+            request_id="demo-proxy-003",
+            provider="openai",
+            model="gpt-4o-mini",
+            memories_used=5,
+            memory_ids=["demo-6", "demo-7", "demo-8", "demo-9", "demo-10"],
+            redactions_applied=2,
+            consent_required=False,
+            query_summary="Summarize my recent financial goals",
+        )
+        console.print("[green]✓[/] Loaded 3 demo audit entries")
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not add demo audit entries: {e}[/]")
+
+    # ── Pre-populate a pending consent request ──
+    try:
+        from closedclaw.api.routes.consent import create_consent_request
+
+        create_consent_request(
+            memory_id="demo-consent-1",
+            memory_text="User's SSN ends in 4829.",
+            sensitivity=3,
+            provider="openai",
+            rule_triggered="level3_consent_required",
+        )
+        console.print("[green]✓[/] Loaded 1 demo pending consent request")
+    except Exception as e:
+        console.print(f"[yellow]Warning: Could not add demo consent request: {e}[/]")
 
 
 def main():

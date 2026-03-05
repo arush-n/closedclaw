@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Bell, ShieldCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -153,9 +154,17 @@ export function ConsentCenter() {
         )}
       </Button>
 
-      {isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl glass-card rounded-2xl p-6 animate-fade-in">
+      {isOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsOpen(false); }}
+          onKeyDown={(e) => { if (e.key === "Escape") setIsOpen(false); }}
+          role="dialog"
+          aria-modal="true"
+          tabIndex={-1}
+          ref={(el) => el?.focus()}
+        >
+          <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto glass-card rounded-2xl p-6 animate-fade-in">
             <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center">
@@ -251,7 +260,8 @@ export function ConsentCenter() {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

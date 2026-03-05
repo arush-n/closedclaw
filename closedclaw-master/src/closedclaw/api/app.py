@@ -12,8 +12,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.openapi.utils import get_openapi
+import httpx
 
 from closedclaw.api import __version__  # noqa: E402
 from closedclaw.api.core.config import get_settings, init_closedclaw
@@ -227,6 +228,50 @@ Get your token from `~/.closedclaw/token`
     app.include_router(mcp.router)
     app.include_router(swarm.router)
     app.include_router(addon.router)
+
+    # Dashboard reverse proxy — forwards /app/* to the Next.js dev server
+    _dashboard_port = int(os.getenv("CLOSEDCLAW_DASHBOARD_PORT", "0"))
+
+    if _dashboard_port:
+        _dashboard_base = f"http://127.0.0.1:{_dashboard_port}"
+        _dashboard_client = httpx.AsyncClient(base_url=_dashboard_base, timeout=30.0)
+
+        @app.api_route("/app/{path:path}", methods=["GET", "POST", "PUT", "DELETE"], include_in_schema=False)
+        @app.api_route("/app", methods=["GET"], include_in_schema=False)
+        async def _dashboard_proxy(request: Request, path: str = ""):
+            url = f"/{path}" if path else "/"
+            query = str(request.url.query)
+            if query:
+                url = f"{url}?{query}"
+            headers = dict(request.headers)
+            headers.pop("host", None)
+            try:
+                resp = await _dashboard_client.request(
+                    method=request.method,
+                    url=url,
+                    headers=headers,
+                    content=await request.body(),
+                )
+                excluded = {"transfer-encoding", "content-encoding", "content-length"}
+                resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+                return Response(content=resp.content, status_code=resp.status_code, headers=resp_headers)
+            except httpx.ConnectError:
+                return JSONResponse({"error": "Dashboard not ready yet — try again in a few seconds"}, status_code=503)
+
+        # Also proxy Next.js internal assets (_next/*)
+        @app.api_route("/_next/{path:path}", methods=["GET"], include_in_schema=False)
+        async def _dashboard_next_assets(request: Request, path: str = ""):
+            url = f"/_next/{path}"
+            query = str(request.url.query)
+            if query:
+                url = f"{url}?{query}"
+            try:
+                resp = await _dashboard_client.get(url)
+                excluded = {"transfer-encoding", "content-encoding", "content-length"}
+                resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+                return Response(content=resp.content, status_code=resp.status_code, headers=resp_headers)
+            except httpx.ConnectError:
+                return Response(status_code=503)
 
     # Custom OpenAPI schema
     def custom_openapi():

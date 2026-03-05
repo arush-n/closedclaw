@@ -208,11 +208,24 @@ class MemoryTools:
             consent_threshold = self.settings.require_consent_level
 
             if sensitivity >= consent_threshold:
-                # Queue for consent instead of storing directly
-                consent_id = str(uuid.uuid4())
+                # Queue for consent via the persistent consent system
                 logger.info(
                     f"write_memory: consent required (level={sensitivity}, threshold={consent_threshold})"
                 )
+                try:
+                    from closedclaw.api.routes.consent import create_consent_request
+                    pending = create_consent_request(
+                        memory_id=f"pending-{uuid.uuid4().hex[:12]}",
+                        memory_text=input.content,
+                        sensitivity=sensitivity,
+                        provider="clawdbot",
+                        rule_triggered=f"sensitivity_level_{sensitivity}_requires_consent",
+                    )
+                    consent_id = pending.request_id
+                except Exception as e:
+                    logger.warning(f"Failed to create persistent consent request: {e}")
+                    consent_id = str(uuid.uuid4())
+
                 return WriteMemoryOutput(
                     stored=False,
                     consent_required=True,
