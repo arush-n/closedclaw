@@ -181,8 +181,8 @@ class Settings(BaseSettings):
     )
     enable_redaction: bool = Field(default=True, description="Enable PII redaction")
     
-    # Crypto settings
-    enable_encryption: bool = Field(default=True, description="Enable memory encryption")
+    # Crypto settings (always enabled — cannot be disabled)
+    enable_encryption: bool = Field(default=True, description="Memory encryption (always on)")
 
     # Agent Swarm settings
     swarm_enabled: bool = Field(default=False, description="Enable the agent swarm system")
@@ -242,8 +242,18 @@ class Settings(BaseSettings):
         expected_token = self.get_or_create_token()
         return hmac.compare_digest(candidate, expected_token)
     
+    # Fields that contain secrets and must be encrypted on disk
+    _SENSITIVE_FIELDS = frozenset({
+        "openai_api_key",
+        "anthropic_api_key",
+        "groq_api_key",
+        "together_api_key",
+    })
+
     def save(self):
-        """Save current settings to config file."""
+        """Save current settings to config file. Sensitive fields are encrypted."""
+        from closedclaw.api.core.crypto import encrypt_config_value
+
         self.ensure_directories()
         config_data = self.model_dump(
             exclude={"auth_token"},  # Don't save token in config
@@ -253,17 +263,36 @@ class Settings(BaseSettings):
         for key, value in config_data.items():
             if isinstance(value, Path):
                 config_data[key] = str(value)
-        
+
+        # Encrypt sensitive fields
+        for field in self._SENSITIVE_FIELDS:
+            if field in config_data and config_data[field]:
+                config_data[field] = encrypt_config_value(str(config_data[field]))
+
+        # Force encryption on
+        config_data["enable_encryption"] = True
+
         with open(CONFIG_FILE, "w") as f:
             json.dump(config_data, f, indent=2)
-    
+
     @classmethod
     def load(cls) -> "Settings":
-        """Load settings from config file, merged with env vars."""
+        """Load settings from config file, merged with env vars. Decrypts sensitive fields."""
+        from closedclaw.api.core.crypto import decrypt_config_value
+
         config_data = {}
         if CONFIG_FILE.exists():
             with open(CONFIG_FILE) as f:
                 config_data = json.load(f)
+
+        # Decrypt sensitive fields
+        for field in cls._SENSITIVE_FIELDS:
+            if field in config_data and config_data[field]:
+                config_data[field] = decrypt_config_value(str(config_data[field]))
+
+        # Force encryption on regardless of stored value
+        config_data["enable_encryption"] = True
+
         return cls(**config_data)
 
 

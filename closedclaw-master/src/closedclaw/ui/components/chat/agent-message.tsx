@@ -42,10 +42,10 @@ export function AgentMessage({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-sm text-zinc-200 prose-chat"
+        className="text-sm text-slate-200 prose-chat"
       >
         {isStreaming && !message.content ? (
-          <div className="flex items-center gap-2 text-zinc-500">
+          <div className="flex items-center gap-2 text-slate-500">
             <Loader2 className="size-4 animate-spin" />
             <span>Thinking...</span>
           </div>
@@ -63,14 +63,14 @@ export function AgentMessage({
                 const isInline = !className;
                 if (isInline) {
                   return (
-                    <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm text-primary">
+                    <code className="bg-white/[0.06] px-1.5 py-0.5 rounded text-sm text-primary">
                       {children}
                     </code>
                   );
                 }
                 return (
                   <code
-                    className="block bg-zinc-900 p-3 rounded-lg text-sm overflow-x-auto mb-2"
+                    className="block bg-black/30 p-3 rounded-lg text-sm overflow-x-auto mb-2"
                     {...props}
                   >
                     {children}
@@ -89,7 +89,7 @@ export function AgentMessage({
                 </a>
               ),
               blockquote: ({ children }) => (
-                <blockquote className="border-l-2 border-primary/50 pl-4 italic text-zinc-400 mb-2">
+                <blockquote className="border-l-2 border-primary/50 pl-4 italic text-slate-400 mb-2">
                   {children}
                 </blockquote>
               ),
@@ -111,21 +111,21 @@ export function AgentMessage({
         <button
           type="button"
           onClick={() => onCopy(message.id, message.content)}
-          className="p-1.5 hover:bg-zinc-800 rounded transition-colors"
+          className="p-1.5 hover:bg-white/[0.06] rounded transition-colors"
           title="Copy message"
         >
           {isCopied ? (
             <Check className="size-3.5 text-green-400" />
           ) : (
-            <Copy className="size-3.5 text-zinc-500 hover:text-zinc-300" />
+            <Copy className="size-3.5 text-slate-500 hover:text-slate-300" />
           )}
         </button>
         <button
           type="button"
           onClick={() => setFeedback(feedback === "like" ? null : "like")}
           className={cn(
-            "p-1.5 hover:bg-zinc-800 rounded transition-colors",
-            feedback === "like" && "bg-zinc-800"
+            "p-1.5 hover:bg-white/[0.06] rounded transition-colors",
+            feedback === "like" && "bg-white/[0.06]"
           )}
           title="Like"
         >
@@ -134,7 +134,7 @@ export function AgentMessage({
               "size-3.5",
               feedback === "like"
                 ? "text-green-400 fill-green-400"
-                : "text-zinc-500 hover:text-zinc-300"
+                : "text-slate-500 hover:text-slate-300"
             )}
           />
         </button>
@@ -142,8 +142,8 @@ export function AgentMessage({
           type="button"
           onClick={() => setFeedback(feedback === "dislike" ? null : "dislike")}
           className={cn(
-            "p-1.5 hover:bg-zinc-800 rounded transition-colors",
-            feedback === "dislike" && "bg-zinc-800"
+            "p-1.5 hover:bg-white/[0.06] rounded transition-colors",
+            feedback === "dislike" && "bg-white/[0.06]"
           )}
           title="Dislike"
         >
@@ -152,7 +152,7 @@ export function AgentMessage({
               "size-3.5",
               feedback === "dislike"
                 ? "text-red-400 fill-red-400"
-                : "text-zinc-500 hover:text-zinc-300"
+                : "text-slate-500 hover:text-slate-300"
             )}
           />
         </button>

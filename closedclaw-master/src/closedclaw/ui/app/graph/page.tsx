@@ -121,14 +121,9 @@ export default function GraphPage() {
   ]);
 
   return (
-    <div className="h-screen w-screen bg-zinc-950 flex flex-col overflow-hidden">
-      <main className="flex-1 relative">
-        <div className="absolute top-4 left-6 z-20 flex items-center gap-2 text-slate-100">
-          <div className="w-7 h-7 rounded-md border border-slate-700/70 bg-slate-900/70 flex items-center justify-center text-slate-200 text-xs font-semibold">CC</div>
-          <h1 className="text-2xl font-semibold tracking-tight">closedclaw</h1>
-        </div>
-
-        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+    <div className="h-[calc(100vh-52px)] w-full bg-zinc-950 flex flex-col overflow-hidden">
+      <main className="flex-1 relative overflow-hidden">
+        <div className="absolute top-3 right-4 z-20 flex items-center gap-2">
           <div className="flex items-center bg-slate-900/70 border border-slate-700/50 rounded-lg p-0.5 backdrop-blur-md">
             <button
               onClick={() => setViewMode("graph")}
@@ -184,7 +179,7 @@ export default function GraphPage() {
         </div>
 
         {showSettings && (
-          <div className="absolute top-16 right-4 z-20 bg-slate-950/85 border border-slate-700/50 rounded-xl p-3 flex items-center gap-4 backdrop-blur-md">
+          <div className="absolute top-14 right-4 z-20 bg-slate-950/85 border border-slate-700/50 rounded-xl p-3 flex items-center gap-4 backdrop-blur-md">
             <div className="flex items-center gap-2">
               <label className="text-xs text-slate-400">User ID</label>
               <input

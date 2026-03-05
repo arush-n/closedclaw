@@ -138,18 +138,15 @@ class TerminationLock:
         except OSError:
             pass
 
-        # Write the plaintext password to a separate file for the admin
-        pw_file = self._key_file.with_suffix(".password")
-        pw_file.write_text(password)
-        try:
-            pw_file.chmod(0o600)
-        except OSError:
-            pass
-
-        logger.info(
-            "Generated shutdown password — stored in %s (keep this safe!)",
-            pw_file,
+        # Display password ONCE in terminal — never written to disk as plaintext
+        logger.warning(
+            "SHUTDOWN PASSWORD (shown once, save it now): %s", password,
         )
+
+        # Remove any legacy plaintext password file
+        pw_file = self._key_file.with_suffix(".password")
+        if pw_file.exists():
+            pw_file.unlink(missing_ok=True)
 
     def set_password(self, new_password: str) -> None:
         """Set a new shutdown password (requires server restart to take effect on disk)."""

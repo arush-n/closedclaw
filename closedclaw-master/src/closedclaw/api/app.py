@@ -32,6 +32,7 @@ from closedclaw.api.routes import (
     mcp,
     swarm,
     addon,
+    config_routes,
 )
 
 # Configure logging
@@ -201,7 +202,22 @@ Get your token from `~/.closedclaw/token`
         minimum_size=1024,
         compresslevel=5,
     )
-    
+
+    # Security headers middleware
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next):
+            response = await call_next(request)
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+            return response
+
+    app.add_middleware(SecurityHeadersMiddleware)
+
     # Global exception handler
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
@@ -228,9 +244,19 @@ Get your token from `~/.closedclaw/token`
     app.include_router(mcp.router)
     app.include_router(swarm.router)
     app.include_router(addon.router)
+    app.include_router(config_routes.router)
+
+    # Root redirect → dashboard
+    _dashboard_port = int(os.getenv("CLOSEDCLAW_DASHBOARD_PORT", "0"))
+
+    if _dashboard_port:
+        from fastapi.responses import RedirectResponse
+
+        @app.get("/", include_in_schema=False)
+        async def _root_redirect():
+            return RedirectResponse(url="/app")
 
     # Dashboard reverse proxy — forwards /app/* to the Next.js dev server
-    _dashboard_port = int(os.getenv("CLOSEDCLAW_DASHBOARD_PORT", "0"))
 
     if _dashboard_port:
         _dashboard_base = f"http://127.0.0.1:{_dashboard_port}"

@@ -67,7 +67,7 @@ export const Sidebar = memo<SidebarProps>(function Sidebar({
     <motion.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
-      className="absolute left-6 top-1/2 -translate-y-1/2 z-20"
+      className="absolute left-4 top-3 z-20"
     >
       <div className="flex flex-col py-1 gap-1.5">
           {items.map((item) => {

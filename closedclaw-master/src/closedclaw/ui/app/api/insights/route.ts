@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
     const res = await closedclawRequest("/v1/insights/run", {
       method: "POST",
       body: JSON.stringify(body),
+      timeoutMs: 180_000,
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");

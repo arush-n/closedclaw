@@ -343,3 +343,76 @@ def get_key_manager(keys_dir: Optional[Path] = None) -> KeyManager:
         _key_manager = KeyManager(keys_dir)
         _key_manager.ensure_keypair()
     return _key_manager
+
+
+# ---------------------------------------------------------------------------
+# Config Value Encryption (AES-256-GCM with machine-derived KEK)
+# ---------------------------------------------------------------------------
+
+_CONFIG_KEK_PREFIX = "ENC:"
+
+
+def _derive_config_kek() -> bytes:
+    """Derive a KEK for config encryption from machine-specific data.
+
+    Uses a combination of the hostname, machine-id/username, and a per-install
+    salt stored in ~/.closedclaw/keys/config.salt to produce a stable 32-byte
+    key that is unique to this machine + install.
+    """
+    import platform
+    import getpass
+
+    keys_dir = Path.home() / ".closedclaw" / "keys"
+    keys_dir.mkdir(parents=True, exist_ok=True)
+    salt_path = keys_dir / "config.salt"
+
+    if salt_path.exists():
+        salt = salt_path.read_bytes()
+    else:
+        salt = os.urandom(16)
+        salt_path.write_bytes(salt)
+        try:
+            salt_path.chmod(0o600)
+        except OSError:
+            pass
+
+    # Combine machine-specific identifiers
+    machine_id = f"{platform.node()}:{getpass.getuser()}".encode()
+    kdf = Scrypt(salt=salt, length=32, n=2**14, r=8, p=1)
+    return kdf.derive(machine_id)
+
+
+_config_kek: Optional[bytes] = None
+
+
+def _get_config_kek() -> bytes:
+    global _config_kek
+    if _config_kek is None:
+        _config_kek = _derive_config_kek()
+    return _config_kek
+
+
+def encrypt_config_value(plaintext: str) -> str:
+    """Encrypt a config value using AES-256-GCM. Returns 'ENC:<base64>' string."""
+    if not plaintext or plaintext.startswith(_CONFIG_KEK_PREFIX):
+        return plaintext
+    kek = _get_config_kek()
+    nonce = os.urandom(12)
+    ct = AESGCM(kek).encrypt(nonce, plaintext.encode(), None)
+    payload = nonce + ct  # 12 bytes nonce + ciphertext
+    return _CONFIG_KEK_PREFIX + base64.b64encode(payload).decode()
+
+
+def decrypt_config_value(ciphertext: str) -> str:
+    """Decrypt a config value. Returns plaintext. If not encrypted, returns as-is."""
+    if not ciphertext or not ciphertext.startswith(_CONFIG_KEK_PREFIX):
+        return ciphertext
+    try:
+        kek = _get_config_kek()
+        payload = base64.b64decode(ciphertext[len(_CONFIG_KEK_PREFIX):])
+        nonce, ct = payload[:12], payload[12:]
+        plaintext = AESGCM(kek).decrypt(nonce, ct, None)
+        return plaintext.decode()
+    except Exception:
+        logger.warning("Failed to decrypt config value – returning raw ciphertext")
+        return ciphertext

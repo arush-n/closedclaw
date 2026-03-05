@@ -38,10 +38,10 @@ function ChatEmptyState({
   return (
     <div className="flex flex-col items-center justify-center h-full py-8">
       <ChatOrb size={80} className="mb-6" />
-      <h3 className="text-lg font-medium text-zinc-200 mb-2">
+      <h3 className="text-lg font-medium text-slate-200 mb-2">
         Chat with your memories
       </h3>
-      <p className="text-sm text-zinc-500 mb-6 text-center max-w-[280px]">
+      <p className="text-sm text-slate-500 mb-6 text-center max-w-[280px]">
         Ask questions about your stored memories and get intelligent answers.
       </p>
       <div className="flex flex-col gap-2 w-full max-w-[320px]">
@@ -49,11 +49,11 @@ function ChatEmptyState({
           <Button
             key={suggestion}
             variant="outline"
-            className="w-full justify-start gap-2 h-auto py-2 px-3 text-left border-zinc-800 bg-zinc-900/50 hover:bg-zinc-800 hover:border-primary/50 transition-all"
+            className="w-full justify-start gap-2 h-auto py-2 px-3 text-left border-white/[0.06] bg-white/[0.03] hover:bg-white/[0.06] hover:border-primary/50 transition-all"
             onClick={() => onSuggestionClick(suggestion)}
           >
             <Search className="size-4 text-primary shrink-0" />
-            <span className="text-xs text-zinc-400 truncate">{suggestion}</span>
+            <span className="text-xs text-slate-400 truncate">{suggestion}</span>
           </Button>
         ))}
       </div>
@@ -140,15 +140,15 @@ export function ChatSidebar({
             className={cn(
               "fixed right-0 top-0 h-full z-50",
               "w-full sm:w-[420px] lg:w-[480px]",
-              "bg-zinc-950 border-l border-zinc-800",
+              "bg-[#060c18]/95 backdrop-blur-xl border-l border-white/[0.08]",
               "flex flex-col"
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
               <div className="flex items-center gap-2">
                 <Sparkles className="size-5 text-primary" />
-                <h2 className="font-semibold text-zinc-100">
+                <h2 className="font-semibold text-slate-100">
                   {useClawdBot ? "ClawdBot" : "Memory Chat"}
                 </h2>
               </div>
@@ -161,7 +161,7 @@ export function ChatSidebar({
                     "size-8",
                     useClawdBot
                       ? "text-primary bg-primary/10"
-                      : "text-zinc-500 hover:text-zinc-200"
+                      : "text-slate-500 hover:text-slate-200"
                   )}
                   title={useClawdBot ? "Switch to proxy chat" : "Switch to ClawdBot agent"}
                 >
@@ -172,7 +172,7 @@ export function ChatSidebar({
                     variant="ghost"
                     size="icon"
                     onClick={clearMessages}
-                    className="size-8 text-zinc-500 hover:text-zinc-200"
+                    className="size-8 text-slate-500 hover:text-slate-200"
                     title="Clear chat"
                   >
                     <Trash2 className="size-4" />
@@ -182,7 +182,7 @@ export function ChatSidebar({
                   variant="ghost"
                   size="icon"
                   onClick={onClose}
-                  className="size-8 text-zinc-500 hover:text-zinc-200"
+                  className="size-8 text-slate-500 hover:text-slate-200"
                 >
                   <X className="size-4" />
                 </Button>
@@ -231,7 +231,7 @@ export function ChatSidebar({
             )}
 
             {/* Input Area */}
-            <div className="p-4 border-t border-zinc-800">
+            <div className="p-4 border-t border-white/[0.06]">
               <ChatInput
                 value={input}
                 onChange={(e) => setInput(e.target.value)}

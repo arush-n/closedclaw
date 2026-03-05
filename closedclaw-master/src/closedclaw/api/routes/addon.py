@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from closedclaw.api.core.addon_auth import AddonSession, get_addon_session_manager
 from closedclaw.api.core.config import Settings, get_settings
+from closedclaw.api.deps import get_auth_token
 
 logger = logging.getLogger(__name__)
 
@@ -310,18 +311,48 @@ async def addon_status(
 
 # ── Server Shutdown ──────────────────────────────────────────────────
 
+_shutdown_attempts: dict[str, list[float]] = {}
+_SHUTDOWN_MAX_ATTEMPTS = 5
+_SHUTDOWN_LOCKOUT_SECONDS = 300  # 5 minutes
+
+
 @router.delete("/server/shutdown")
-async def server_shutdown(req: ShutdownRequest):
+async def server_shutdown(
+    req: ShutdownRequest,
+    request: Request,
+    token: str = Depends(get_auth_token),
+):
     """Password-gated server shutdown.
 
-    Requires the shutdown password set during first boot
-    (stored in ~/.closedclaw/shutdown.key.password).
+    Requires both a valid auth token AND the shutdown password.
+    Rate-limited to prevent brute-force attacks.
     """
+    import time
+
+    client_ip = request.client.host if request.client else "unknown"
+    now = time.time()
+
+    # Check lockout
+    attempts = _shutdown_attempts.get(client_ip, [])
+    recent = [t for t in attempts if now - t < _SHUTDOWN_LOCKOUT_SECONDS]
+    _shutdown_attempts[client_ip] = recent
+
+    if len(recent) >= _SHUTDOWN_MAX_ATTEMPTS:
+        logger.warning("Shutdown endpoint locked out for %s", client_ip)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many failed attempts. Locked out for {_SHUTDOWN_LOCKOUT_SECONDS // 60} minutes.",
+        )
+
     from closedclaw.api.core.termination_lock import get_termination_lock
 
     lock = get_termination_lock()
     if not lock.unlock(req.password):
+        _shutdown_attempts.setdefault(client_ip, []).append(now)
         raise HTTPException(status_code=403, detail="Invalid shutdown password")
+
+    # Clear attempts on success
+    _shutdown_attempts.pop(client_ip, None)
 
     import os
     import signal

@@ -364,19 +364,7 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
     fitToViewport(nodes, containerSize.width, containerSize.height);
   }, [fitToViewport, nodes, containerSize]);
 
-  // Loading state
-  if (isLoading && memories.length === 0) {
-    return (
-      <div className={`relative w-full h-full bg-zinc-950 flex items-center justify-center ${className}`}>
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 border-4 border-zinc-700 border-t-blue-500 rounded-full animate-spin mx-auto" />
-          <p className="text-zinc-400">Loading memories...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
+  // Error state — show as overlay instead of blocking
   if (error) {
     return (
       <div className={`relative w-full h-full bg-zinc-950 flex items-center justify-center ${className}`}>
@@ -388,38 +376,36 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
     );
   }
 
-  // Empty state
-  if (memories.length === 0) {
-    return (
-      <div className={`relative w-full h-full bg-zinc-950 flex items-center justify-center ${className}`}>
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mx-auto">
-            <svg
-              className="w-8 h-8 text-zinc-600"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-              />
-            </svg>
-          </div>
-          <p className="text-zinc-400">No memories yet</p>
-          <p className="text-zinc-500 text-sm">Add some memories to see them visualized here</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       ref={containerRef}
       className={`relative w-full h-full bg-zinc-950 overflow-hidden ${className}`}
     >
+      {/* Loading overlay */}
+      {isLoading && memories.length === 0 && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm">
+          <div className="text-center space-y-3">
+            <div className="w-10 h-10 border-3 border-zinc-700 border-t-violet-500 rounded-full animate-spin mx-auto" />
+            <p className="text-slate-400 text-sm">Loading memories...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state overlay */}
+      {!isLoading && memories.length === 0 && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <div className="w-14 h-14 rounded-full bg-zinc-800/50 flex items-center justify-center mx-auto">
+              <svg className="w-7 h-7 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+            </div>
+            <p className="text-slate-400 text-sm">No memories yet</p>
+            <p className="text-slate-500 text-xs">Add some memories to see them visualized here</p>
+          </div>
+        </div>
+      )}
+
       {/* Graph Canvas */}
       <GraphCanvas
         nodes={nodes}

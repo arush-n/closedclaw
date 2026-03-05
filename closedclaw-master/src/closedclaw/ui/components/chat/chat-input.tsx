@@ -31,10 +31,10 @@ export function SendButton({
       disabled={disabled}
       title="Send message"
       className={cn(
-        "bg-zinc-900 border-zinc-800 border p-2 rounded-lg shrink-0 transition-all",
+        "bg-white/[0.04] border-white/[0.06] border p-2 rounded-lg shrink-0 transition-all",
         disabled
           ? "opacity-50 cursor-not-allowed"
-          : "cursor-pointer hover:bg-zinc-800 hover:border-primary/50"
+          : "cursor-pointer hover:bg-white/[0.06] hover:border-primary/50"
       )}
     >
       <svg
@@ -48,7 +48,7 @@ export function SendButton({
         <path
           d="M12 6L10.55 7.4L7 3.85L7 16L5 16L5 3.85L1.45 7.4L-4.37114e-07 6L6 -2.62268e-07L12 6Z"
           fill="currentColor"
-          className="text-zinc-200"
+          className="text-slate-200"
         />
       </svg>
     </button>
@@ -61,9 +61,9 @@ export function StopButton({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       title="Stop generation"
-      className="bg-zinc-900 border-zinc-800 border p-2 rounded-lg shrink-0 cursor-pointer hover:bg-zinc-800 hover:border-destructive/50 transition-all"
+      className="bg-white/[0.04] border-white/[0.06] border p-2 rounded-lg shrink-0 cursor-pointer hover:bg-white/[0.06] hover:border-destructive/50 transition-all"
     >
-      <Square className="size-4 text-zinc-200 fill-zinc-200" />
+      <Square className="size-4 text-slate-200 fill-zinc-200" />
     </button>
   );
 }
@@ -108,9 +108,9 @@ export function ChatInput({
       transition={{ duration: 0.3 }}
     >
       {/* Status bar */}
-      <div className="flex items-center gap-3 px-3 py-2 bg-zinc-900/50 rounded-t-xl border-x border-t border-zinc-800">
+      <div className="flex items-center gap-3 px-3 py-2 bg-white/[0.04]/50 rounded-t-xl border-x border-t border-white/[0.06]">
         <ChatOrbSmall size={20} className="shrink-0" />
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-slate-500">
           {statusMessage || "Ready to chat..."}
         </p>
       </div>
@@ -118,7 +118,7 @@ export function ChatInput({
       {/* Input area */}
       <div
         className={cn(
-          "flex items-end gap-2 bg-zinc-900 rounded-b-xl p-3 border border-zinc-800 focus-within:border-primary/50 transition-all",
+          "flex items-end gap-2 bg-white/[0.04] rounded-b-xl p-3 border border-white/[0.06] focus-within:border-primary/50 transition-all",
           isMultiline && "flex-col items-stretch"
         )}
       >
@@ -128,7 +128,7 @@ export function ChatInput({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="bg-transparent w-full p-2 min-h-9 placeholder:text-zinc-600 focus:outline-none resize-none overflow-y-auto text-zinc-200 transition-all"
+          className="bg-transparent w-full p-2 min-h-9 placeholder:text-slate-600 focus:outline-none resize-none overflow-y-auto text-slate-200 transition-all"
           rows={1}
           disabled={isLoading}
         />

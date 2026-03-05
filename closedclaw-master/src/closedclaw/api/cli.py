@@ -128,11 +128,19 @@ def serve(
     console.print(f"[dim]Memory DB:[/] {settings.memory_db_path}")
     console.print()
     
-    # Show endpoints
-    console.print(f"[bold]API Server:[/] http://{host}:{port}")
-    console.print(f"[bold]Dashboard:[/] http://{host}:{port}/app")
-    console.print(f"[bold]OpenAI Proxy:[/] http://{host}:{port}/v1/chat/completions")
-    console.print(f"[bold]API Docs:[/] http://{host}:{port}/docs")
+    # Show endpoints — single URL prominently
+    base_url = f"http://{host}:{port}"
+    console.print()
+    console.print(Panel.fit(
+        f"[bold green]{base_url}[/]",
+        title="Open in browser",
+        border_style="green",
+    ))
+    console.print()
+    console.print(f"[dim]Dashboard:[/]    {base_url}/app")
+    console.print(f"[dim]API Server:[/]   {base_url}")
+    console.print(f"[dim]OpenAI Proxy:[/] {base_url}/v1/chat/completions")
+    console.print(f"[dim]API Docs:[/]     {base_url}/docs")
     console.print()
     
     console.print("[dim]Press Ctrl+C to stop[/]")
