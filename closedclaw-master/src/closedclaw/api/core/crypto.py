@@ -26,6 +26,13 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
+# Argon2id support (preferred for passphrase → KEK derivation)
+try:
+    from argon2.low_level import Type as _Argon2Type, hash_secret_raw as _argon2_hash
+    _HAS_ARGON2 = True
+except ImportError:
+    _HAS_ARGON2 = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -182,7 +189,8 @@ class EnvelopeEncryption:
 
     Each memory gets its own random 256-bit DEK (Data Encryption Key).
     The DEK is encrypted with the KEK (Key Encryption Key).
-    The KEK is derived from the user passphrase via Scrypt.
+    The KEK is derived from the user passphrase via Argon2id (preferred)
+    or Scrypt (fallback).
     """
 
     def __init__(self, kek: Optional[bytes] = None):
@@ -190,11 +198,31 @@ class EnvelopeEncryption:
 
     @staticmethod
     def derive_kek(passphrase: str, salt: Optional[bytes] = None) -> Tuple[bytes, bytes]:
-        """Derive KEK from passphrase using Scrypt. Returns (kek, salt)."""
+        """Derive KEK from passphrase using Argon2id (preferred) or Scrypt (fallback).
+
+        Argon2id params: time_cost=3, memory_cost=65536 (64 MiB), parallelism=4, hash_len=32
+        Scrypt fallback: n=2^17, r=8, p=1, length=32
+
+        Returns (kek, salt).
+        """
         if salt is None:
             salt = os.urandom(16)
-        kdf = Scrypt(salt=salt, length=32, n=2**17, r=8, p=1)
-        kek = kdf.derive(passphrase.encode())
+
+        if _HAS_ARGON2:
+            kek = _argon2_hash(
+                secret=passphrase.encode(),
+                salt=salt,
+                time_cost=3,
+                memory_cost=65536,
+                parallelism=4,
+                hash_len=32,
+                type=_Argon2Type.ID,
+            )
+        else:
+            logger.debug("argon2-cffi not available, falling back to Scrypt for KEK derivation")
+            kdf = Scrypt(salt=salt, length=32, n=2**17, r=8, p=1)
+            kek = kdf.derive(passphrase.encode())
+
         return kek, salt
 
     def set_kek(self, kek: bytes) -> None:

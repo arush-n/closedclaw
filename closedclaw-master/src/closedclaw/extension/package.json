@@ -1,0 +1,16 @@
+{
+  "name": "openclaw-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Openclaw browser extension — privacy-first AI memory layer",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild background/service_worker.ts content_scripts/interceptor.ts popup/popup.ts --bundle --outdir=dist --format=esm --target=es2022 --sourcemap",
+    "watch": "esbuild background/service_worker.ts content_scripts/interceptor.ts popup/popup.ts --bundle --outdir=dist --format=esm --target=es2022 --sourcemap --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,0 +1,14 @@
+Collecting argon2-cffi
+  Downloading argon2_cffi-25.1.0-py3-none-any.whl.metadata (4.1 kB)
+Collecting argon2-cffi-bindings (from argon2-cffi)
+  Downloading argon2_cffi_bindings-25.1.0-cp39-abi3-macosx_11_0_arm64.whl.metadata (7.4 kB)
+Requirement already satisfied: cffi>=1.0.1 in ./venv/lib/python3.13/site-packages (from argon2-cffi-bindings->argon2-cffi) (2.0.0)
+Requirement already satisfied: pycparser in ./venv/lib/python3.13/site-packages (from cffi>=1.0.1->argon2-cffi-bindings->argon2-cffi) (3.0)
+Downloading argon2_cffi-25.1.0-py3-none-any.whl (14 kB)
+Downloading argon2_cffi_bindings-25.1.0-cp39-abi3-macosx_11_0_arm64.whl (31 kB)
+Installing collected packages: argon2-cffi-bindings, argon2-cffi
+
+Successfully installed argon2-cffi-25.1.0 argon2-cffi-bindings-25.1.0
+
+[notice] A new release of pip is available: 25.2 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip

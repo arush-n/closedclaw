@@ -51,6 +51,7 @@ class SwarmTaskType(str, Enum):
     AUDIT_VERIFY = "audit_verify"
     COMPACT_MEMORIES = "compact_memories"
     EVOLVE_POLICY = "evolve_policy"
+    ADDON_PROCESS = "addon_process"
 
 
 class SwarmTask(BaseModel):

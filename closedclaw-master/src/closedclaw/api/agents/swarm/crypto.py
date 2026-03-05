@@ -49,6 +49,9 @@ AGENT_NAMES = [
     "sentinel",
     "arbitrator",
     "auditor",
+    "injector",
+    "addon_memory",
+    "processor",
 ]
 
 # ── Machine-derived secret for encrypting keys at rest ─────────────────

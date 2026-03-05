@@ -43,6 +43,7 @@ dependencies = [
     
     # Cryptography
     "cryptography>=42.0.0",
+    "argon2-cffi>=23.1.0",
     
     # Database
     "sqlalchemy>=2.0.0",

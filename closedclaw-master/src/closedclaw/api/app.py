@@ -30,6 +30,7 @@ from closedclaw.api.routes import (
     clawdbot,
     mcp,
     swarm,
+    addon,
 )
 
 # Configure logging
@@ -72,6 +73,14 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.exception("Failed to initialize closedclaw configuration")
         raise
+
+    # Install termination lock (password-gated shutdown)
+    try:
+        from closedclaw.api.core.termination_lock import get_termination_lock
+        term_lock = get_termination_lock()
+        term_lock.install()
+    except Exception as exc:
+        logger.warning("Failed to install termination lock: %s", exc)
 
     startup_info["provider"] = settings.provider
     startup_info["local_engine"] = {"enabled": bool(settings.local_engine.enabled)}
@@ -217,6 +226,7 @@ Get your token from `~/.closedclaw/token`
     app.include_router(clawdbot.router)
     app.include_router(mcp.router)
     app.include_router(swarm.router)
+    app.include_router(addon.router)
 
     # Custom OpenAPI schema
     def custom_openapi():
@@ -291,6 +301,10 @@ Get your token from `~/.closedclaw/token`
             {
                 "name": "Agent Swarm",
                 "description": "Crypto-secured agentic memory team with Ed25519-signed inter-agent communication",
+            },
+            {
+                "name": "Addon",
+                "description": "Browser extension registration, authentication, and context processing",
             },
         ]
         

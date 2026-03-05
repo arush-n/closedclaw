@@ -80,6 +80,9 @@ DEFAULT_AGENT_TOOLS: Dict[str, Set[str]] = {
     "sentinel": {"memory_search", "memory_timeline", "memory_reflect", "delegate_to_agent", "store_working_memory", "log_decision"},
     "arbitrator": {"check_constitution", "delegate_to_agent", "store_working_memory", "log_decision"},
     "auditor": {"verify_signature", "check_constitution", "store_working_memory", "log_decision"},
+    "injector": {"check_constitution", "store_working_memory", "log_decision"},
+    "addon_memory": {"memory_search", "memory_write", "request_vote", "check_constitution", "store_working_memory", "log_decision"},
+    "processor": {"memory_search", "delegate_to_agent", "store_working_memory", "log_decision"},
 }
 
 

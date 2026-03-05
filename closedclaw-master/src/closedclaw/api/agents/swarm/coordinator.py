@@ -65,6 +65,15 @@ TASK_PIPELINES: Dict[SwarmTaskType, List[str]] = {
     SwarmTaskType.EVOLVE_POLICY: [
         "policy",       # Analyze consent patterns, propose amendments
     ],
+    SwarmTaskType.ADDON_PROCESS: [
+        "accessor",       # 1. Retrieve relevant memories + graph traversal
+        "governance",     # 2. Firewall + policy evaluation
+        "addon_memory",   # 3. Copyright attribution + consent for captures
+        "injector",       # 4. Build enriched system prompt prefix
+        "processor",      # 5. Secondary redaction for provider
+        "sentinel",       # 6. Hallucination check (conditional: sensitivity >= 2)
+        "auditor",        # 7. Log the context injection
+    ],
 }
 
 # Agents that require high-sensitivity context to activate
@@ -146,6 +155,15 @@ class SwarmCoordinator:
         elif name == "auditor":
             from closedclaw.api.agents.swarm.auditor import AuditorAgent
             return AuditorAgent(**kwargs)
+        elif name == "injector":
+            from closedclaw.api.agents.swarm.injector import InjectorAgent
+            return InjectorAgent(**kwargs)
+        elif name == "addon_memory":
+            from closedclaw.api.agents.swarm.addon_memory import AddonMemoryAgent
+            return AddonMemoryAgent(**kwargs)
+        elif name == "processor":
+            from closedclaw.api.agents.swarm.processor import ProcessorAgent
+            return ProcessorAgent(**kwargs)
         else:
             raise ValueError(f"Unknown agent: {name}")
 
@@ -443,7 +461,10 @@ class SwarmCoordinator:
     # ── Status & Introspection ────────────────────────────────────────
 
     def get_status(self) -> Dict[str, Any]:
-        all_agent_names = ["accessor", "governance", "sentinel", "maker", "policy", "arbitrator", "auditor"]
+        all_agent_names = [
+            "accessor", "governance", "sentinel", "maker", "policy",
+            "arbitrator", "auditor", "injector", "addon_memory", "processor",
+        ]
         agents_status = {}
         for name in all_agent_names:
             if name in self._agents:
