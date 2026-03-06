@@ -28,7 +28,9 @@ RUN pip install --no-cache-dir \
     "sqlalchemy>=2.0.0" \
     "numpy>=1.24.0" \
     "ollama>=0.1.0" \
-    "starlette>=0.36.0"
+    "starlette>=0.36.0" \
+    "mem0ai>=0.1.0" \
+    "qdrant-client>=1.7.0"
 
 # Add source to Python path
 ENV PYTHONPATH="/app/src"

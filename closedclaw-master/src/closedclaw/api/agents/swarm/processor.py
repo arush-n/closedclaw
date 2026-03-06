@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class ProcessorAgent(BaseAgent):
     AGENT_NAME = "processor"
+    MODEL_TIER = "none"  # No LLM — pure PIIRedactor pipeline
 
     async def handle(self, message: AgentMessage, context: Dict[str, Any]) -> AgentMessage:
         action = message.payload.get(

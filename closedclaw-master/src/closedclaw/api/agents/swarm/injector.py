@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 class InjectorAgent(BaseAgent):
     AGENT_NAME = "injector"
+    MODEL_TIER = "none"  # No LLM — pure rule assembly + prompt building
 
     async def handle(self, message: AgentMessage, context: Dict[str, Any]) -> AgentMessage:
         action = message.payload.get(

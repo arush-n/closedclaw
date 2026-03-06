@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class SentinelAgent(BaseAgent):
     AGENT_NAME = "sentinel"
+    MODEL_TIER = "heavy"  # qwen3.5:4b — nuanced hallucination detection
 
     HALLUCINATION_CHECK_PROMPT = """{few_shot}Compare the AI response against the user's stored memories.
 Flag claims that contradict or are fabricated (not supported by any memory).
@@ -111,7 +112,7 @@ JSON:"""
             response=llm_response[:1500],
             memories=mem_text,
         )
-        raw = self._call_llm(prompt, temperature=0.1, max_tokens=600)
+        raw = await self._call_llm(prompt, temperature=0.1, max_tokens=600)
         issues = self._parse_json_array(raw)
 
         # Store result in working memory for future few-shot
@@ -173,7 +174,7 @@ JSON:"""
             patterns=pattern_text,
             response=llm_response[:1000],
         )
-        raw = self._call_llm(prompt, temperature=0.1, max_tokens=300)
+        raw = await self._call_llm(prompt, temperature=0.1, max_tokens=300)
         result = self._parse_json_object(raw)
 
         return self._make_response(

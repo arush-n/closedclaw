@@ -46,7 +46,7 @@ class NotionAgent(BaseAgent):
                 in_reply_to=message.message_id,
             )
 
-        raw = self._call_llm(
+        raw = await self._call_llm(
             NOTION_INTENT_PROMPT.format(prompt=prompt[:500]),
             temperature=0.1,
             max_tokens=400,

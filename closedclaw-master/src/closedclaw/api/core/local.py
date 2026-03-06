@@ -105,6 +105,38 @@ LOCAL_MODELS: Dict[str, LocalModelConfig] = {
         hardware_profile=HardwareProfile.MINIMAL,
         description="Alibaba's model with excellent multilingual support and long context.",
     ),
+    # ── Qwen 3.5 agent tier models ────────────────────────────────────────
+    "qwen3.5-0.8b": LocalModelConfig(
+        name="Qwen 3.5 0.8B",
+        ollama_model="qwen3.5:0.8b",
+        parameters="0.8B",
+        quantization="Q4_K_M",
+        context_length=32768,
+        vram_required_gb=0.6,
+        hardware_profile=HardwareProfile.MINIMAL,
+        description="Tiny Qwen3.5 for trivial tasks (query expansion, simple JSON). Runs on any hardware.",
+    ),
+    "qwen3.5-2b": LocalModelConfig(
+        name="Qwen 3.5 2B",
+        ollama_model="qwen3.5:2b",
+        parameters="2B",
+        quantization="Q4_K_M",
+        context_length=32768,
+        vram_required_gb=1.4,
+        hardware_profile=HardwareProfile.MINIMAL,
+        description="Small Qwen3.5 for structured extraction and classification tasks.",
+    ),
+    "qwen3.5-4b": LocalModelConfig(
+        name="Qwen 3.5 4B",
+        ollama_model="qwen3.5:4b",
+        parameters="4B",
+        quantization="Q4_K_M",
+        context_length=32768,
+        vram_required_gb=2.7,
+        hardware_profile=HardwareProfile.MINIMAL,
+        description="Full Qwen3.5 for heavy tasks (hallucination detection, arbitration).",
+        supports_tools=True,
+    ),
     "gemma2-2b-q4": LocalModelConfig(
         name="Gemma 2 2B (Q4)",
         ollama_model="gemma2:2b-instruct-q4_K_M",
@@ -295,6 +327,61 @@ LOCAL_EMBEDDING_MODELS: Dict[str, LocalEmbeddingConfig] = {
         description="Ultra-fast, tiny embeddings. Good for very constrained hardware.",
     ),
 }
+
+
+# =============================================================================
+# AGENT MODEL TIERS (qwen3.5 family, hardware-aware)
+# =============================================================================
+# Maps hardware_profile → (light, medium, heavy) agent model.
+# Downscales automatically so the full pipeline always fits in available RAM.
+#
+#   light  (0.8b) — trivial: query expansion, simple JSON output
+#   medium (2b)   — structured: fact extraction, rule generation
+#   heavy  (4b)   — reasoning: hallucination detection, arbitration
+#
+#   minimal  (<16GB): heavy downgraded to 2b to fit alongside OS + Qdrant + Ollama
+#   standard+      : full 0.8b / 2b / 4b split
+
+AGENT_MODELS_BY_PROFILE: Dict[HardwareProfile, Dict[str, str]] = {
+    HardwareProfile.MINIMAL: {
+        "light":  "qwen3.5:0.8b",
+        "medium": "qwen3.5:0.8b",  # downscale — save RAM for Qdrant + Ollama overhead
+        "heavy":  "qwen3.5:2b",    # max usable on ≤8GB
+    },
+    HardwareProfile.STANDARD: {
+        "light":  "qwen3.5:0.8b",
+        "medium": "qwen3.5:2b",
+        "heavy":  "qwen3.5:4b",
+    },
+    HardwareProfile.PERFORMANCE: {
+        "light":  "qwen3.5:0.8b",
+        "medium": "qwen3.5:2b",
+        "heavy":  "qwen3.5:4b",
+    },
+    HardwareProfile.WORKSTATION: {
+        "light":  "qwen3.5:0.8b",
+        "medium": "qwen3.5:2b",
+        "heavy":  "qwen3.5:4b",
+    },
+}
+
+
+def get_agent_model(tier: str, profile: str = "standard") -> str:
+    """Return the Ollama model name for the given agent tier and hardware profile.
+
+    Args:
+        tier: "light", "medium", or "heavy"
+        profile: hardware profile name (minimal/standard/performance/workstation)
+
+    Returns:
+        Ollama model identifier, e.g. "qwen3.5:2b"
+    """
+    try:
+        hw = HardwareProfile(profile)
+    except ValueError:
+        hw = HardwareProfile.STANDARD
+    tier_map = AGENT_MODELS_BY_PROFILE.get(hw, AGENT_MODELS_BY_PROFILE[HardwareProfile.STANDARD])
+    return tier_map.get(tier, tier_map["heavy"])
 
 
 # =============================================================================

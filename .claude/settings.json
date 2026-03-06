@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST http://localhost:8765/v1/swarm/tasks -H \"Content-Type: application/json\" -H \"Authorization: Bearer 5niCW-NPvhkEDD8yw6oK9b8LMtgmJKGe0Tz7aHUlUak\" -d '{\"\"task_type\"\":\"\"store_memory\"\",\"\"user_id\"\":\"\"test-user-99\"\",\"\"input_data\"\":{\"\"raw_text\"\":\"\"My favorite programming language is Rust and I work at Acme Corp as a senior engineer. I live in San Francisco and enjoy hiking on weekends.\"\"}}')",
+      "Bash(docker exec closedclaw-server env)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); [print\\(f\"\"{m[''name'']:30s} {m.get\\(''size'',0\\)/1e9:.1f}GB\"\"\\) for m in data.get\\(''models'',[]\\)]\")",
+      "Bash(curl -s -X POST http://localhost:8765/v1/swarm/tasks -H \"Content-Type: application/json\" -H \"Authorization: Bearer 5niCW-NPvhkEDD8yw6oK9b8LMtgmJKGe0Tz7aHUlUak\" -d '{\"\"task_type\"\":\"\"store_memory\"\",\"\"user_id\"\":\"\"test-user-100\"\",\"\"input_data\"\":{\"\"raw_text\"\":\"\"My favorite programming language is Rust and I work at Acme Corp as a senior engineer. I live in San Francisco and enjoy hiking on weekends.\"\"}}')",
+      "Bash(curl -s -X POST http://localhost:8765/v1/swarm/tasks -H \"Content-Type: application/json\" -H \"Authorization: Bearer 5niCW-NPvhkEDD8yw6oK9b8LMtgmJKGe0Tz7aHUlUak\" -d '{\"\"task_type\"\":\"\"retrieve_memory\"\",\"\"user_id\"\":\"\"test-user-100\"\",\"\"input_data\"\":{\"\"query\"\":\"\"What programming language does the user prefer?\"\"}}')"
+    ]
+  }
+}

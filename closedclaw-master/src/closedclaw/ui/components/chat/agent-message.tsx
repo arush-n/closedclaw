@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Check, ThumbsUp, ThumbsDown, Loader2 } from "lucide-react";
+import { Copy, Check, ThumbsUp, ThumbsDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Message } from "./types";
 import { RelatedMemories } from "./related-memories";
 import { ContextInspector } from "./context-inspector";
-import { motion } from "framer-motion";
+import { ThinkingSteps } from "./thinking-steps";
+import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
 interface AgentMessageProps {
@@ -38,18 +39,20 @@ export function AgentMessage({
         />
       )}
 
+      {/* Thinking Steps — shown while loading, hidden once content arrives */}
+      <AnimatePresence>
+        {isStreaming && !message.content && (
+          <ThinkingSteps isVisible={true} />
+        )}
+      </AnimatePresence>
+
       {/* Message Content */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className="text-sm text-slate-200 prose-chat"
       >
-        {isStreaming && !message.content ? (
-          <div className="flex items-center gap-2 text-slate-500">
-            <Loader2 className="size-4 animate-spin" />
-            <span>Thinking...</span>
-          </div>
-        ) : (
+        {isStreaming && !message.content ? null : (
           <ReactMarkdown
             components={{
               p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,

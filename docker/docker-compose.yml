@@ -81,12 +81,21 @@ services:
       - CLOSEDCLAW_PORT=8765
       - CLOSEDCLAW_LOG_LEVEL=${CLOSEDCLAW_LOG_LEVEL:-INFO}
       - CLOSEDCLAW_FAST_STARTUP=true
-      # Ollama inside Docker
-      - CLOSEDCLAW_OLLAMA_BASE_URL=http://ollama:11434
-      - CLOSEDCLAW_LOCAL_ENGINE_ENABLED=true
-      - CLOSEDCLAW_LOCAL_ENGINE_LLM_MODEL=${OLLAMA_MODEL:-qwen3:4b}
-      - CLOSEDCLAW_LOCAL_FAST_MODEL=${OLLAMA_FAST_MODEL:-qwen3:1.7b}
+      # Use host Ollama (Apple M4 Metal) instead of Docker Ollama (CPU-only).
+      # host.docker.internal resolves to the macOS host from inside Docker containers.
+      - CLOSEDCLAW_LOCAL_OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CLOSEDCLAW_LOCAL_ENABLED=true
+      # Agent model tiers — auto-selected by RAM detection when left empty.
+      # minimal(<16GB): 0.8b/0.8b/2b | standard(16GB+): 0.8b/2b/4b | performance(32GB+): same
+      # Override in .env: OLLAMA_HEAVY_MODEL=qwen3.5:4b, OLLAMA_MEDIUM_MODEL=qwen3.5:2b, etc.
+      - CLOSEDCLAW_LOCAL_LLM_MODEL=${OLLAMA_HEAVY_MODEL:-}
+      - CLOSEDCLAW_LOCAL_FAST_MODEL=${OLLAMA_MEDIUM_MODEL:-}
+      - CLOSEDCLAW_LOCAL_LIGHT_MODEL=${OLLAMA_LIGHT_MODEL:-}
       # Provider config — use ollama for local-only operation
+      - CLOSEDCLAW_SWARM_ENABLED=true
+      - CLOSEDCLAW_QDRANT_HOST=mem0-store
+      - CLOSEDCLAW_OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - CLOSEDCLAW_LOCAL_MODEL=${OLLAMA_MEM0_MODEL:-llama3.2:3b}
       - CLOSEDCLAW_PROVIDER=${CLOSEDCLAW_PROVIDER:-ollama}
       - CLOSEDCLAW_DEFAULT_MODEL=${CLOSEDCLAW_DEFAULT_MODEL:-}
       - CLOSEDCLAW_OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -129,11 +138,11 @@ services:
       - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
       # LLM and embedding config — defaults to Ollama (local)
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
-      - LLM_MODEL=${LLM_MODEL:-qwen3:4b}
-      - LLM_OLLAMA_BASE_URL=http://ollama:11434
+      - LLM_MODEL=${OLLAMA_MEDIUM_MODEL:-qwen3.5:2b}
+      - LLM_OLLAMA_BASE_URL=http://host.docker.internal:11434
       - EMBEDDER_PROVIDER=${EMBEDDER_PROVIDER:-ollama}
       - EMBEDDER_MODEL=${EMBEDDER_MODEL:-nomic-embed-text}
-      - EMBEDDER_OLLAMA_BASE_URL=http://ollama:11434
+      - EMBEDDER_OLLAMA_BASE_URL=http://host.docker.internal:11434
       # Route through control bridge for restricted services
       - CLOSEDCLAW_BRIDGE_URL=http://control-bridge:9000
       - CLOSEDCLAW_BRIDGE_ENABLED=true
@@ -197,7 +206,7 @@ services:
       - OPENCLAW_CONFIG_PATH=/config/openclaw.yaml
       # Provider awareness — bridge tracks which provider is in use
       - CLOSEDCLAW_PROVIDER=${CLOSEDCLAW_PROVIDER:-ollama}
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       # MCP service credentials
       - GOOGLE_OAUTH_TOKEN=${GOOGLE_OAUTH_TOKEN:-}
       - NOTION_API_KEY=${NOTION_API_KEY:-}

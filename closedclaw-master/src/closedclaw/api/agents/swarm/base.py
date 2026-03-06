@@ -9,6 +9,7 @@ Provides:
   - Memory-backed few-shot example retrieval
 """
 
+import asyncio
 import json
 import logging
 import time
@@ -16,6 +17,21 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
 import httpx
+
+# Module-level shared HTTP client — avoids opening a new TCP connection per LLM call.
+# Limits are intentionally conservative: agents make ≤1 LLM call each per pipeline step.
+_OLLAMA_HTTP_CLIENT: Optional[httpx.Client] = None
+
+
+def _get_http_client() -> httpx.Client:
+    global _OLLAMA_HTTP_CLIENT
+    if _OLLAMA_HTTP_CLIENT is None or _OLLAMA_HTTP_CLIENT.is_closed:
+        _OLLAMA_HTTP_CLIENT = httpx.Client(
+            timeout=httpx.Timeout(connect=5.0, read=90.0, write=10.0, pool=5.0),
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=4),
+        )
+    return _OLLAMA_HTTP_CLIENT
+
 
 from closedclaw.api.agents.swarm.bus import MessageBus
 from closedclaw.api.agents.swarm.constitution import Constitution
@@ -29,6 +45,8 @@ class BaseAgent(ABC):
     """Abstract base for all swarm agents."""
 
     AGENT_NAME: str = "base"
+    # Model tier: "heavy" (4b), "medium" (2b), "light" (0.8b), "none" (no LLM calls)
+    MODEL_TIER: str = "heavy"
 
     def __init__(
         self,
@@ -49,12 +67,18 @@ class BaseAgent(ABC):
         self._coordinator = coordinator
         self._stats = AgentStats(agent_id=self.AGENT_NAME)
         self._current_context: Dict[str, Any] = {}
-        self._ollama_base: str = getattr(
-            getattr(settings, "local_engine", None), "ollama_base_url", None
-        ) or "http://localhost:11434"
-        self._ollama_model: str = getattr(
-            getattr(settings, "local_engine", None), "llm_model", None
-        ) or "llama3.2:3b"
+        local = getattr(settings, "local_engine", None)
+        self._ollama_base: str = getattr(local, "ollama_base_url", None) or "http://localhost:11434"
+        # Pick model based on this agent's declared compute tier
+        if local is not None and hasattr(local, "get_full_ollama_model"):
+            if self.MODEL_TIER == "light":
+                self._ollama_model = local.get_light_ollama_model()
+            elif self.MODEL_TIER == "medium":
+                self._ollama_model = local.get_fast_ollama_model()
+            else:  # "heavy" or "none"
+                self._ollama_model = local.get_full_ollama_model()
+        else:
+            self._ollama_model = getattr(local, "llm_model", None) or "qwen3.5:4b"
 
     # ── Abstract ──────────────────────────────────────────────────────
 
@@ -65,17 +89,16 @@ class BaseAgent(ABC):
 
     # ── LLM Helper ────────────────────────────────────────────────────
 
-    def _call_llm(
+    async def _call_llm(
         self,
         prompt: str,
         temperature: float = 0.3,
         max_tokens: int = 500,
         system: str = "",
     ) -> str:
-        """Synchronous Ollama call. Returns raw text response.
+        """Async Ollama call. Runs blocking HTTP in a thread to avoid blocking the event loop.
 
-        Uses httpx sync client to keep agent code simple. Each agent
-        should make at most 1 LLM call per handle() invocation.
+        Each agent should make at most 1 LLM call per handle() invocation.
         """
         messages = []
         if system:
@@ -86,6 +109,9 @@ class BaseAgent(ABC):
             "model": self._ollama_model,
             "messages": messages,
             "stream": False,
+            # Disable qwen3.5 chain-of-thought reasoning for speed.
+            # Must be a top-level field (not inside options) for Ollama >=0.17.
+            "think": False,
             "options": {
                 "temperature": temperature,
                 "num_predict": max_tokens,
@@ -94,21 +120,25 @@ class BaseAgent(ABC):
 
         url = f"{self._ollama_base}/api/chat"
         start = time.time()
+
+        def _do_request() -> dict:
+            client = _get_http_client()
+            resp = client.post(url, json=payload)
+            resp.raise_for_status()
+            return resp.json()
+
         try:
-            with httpx.Client(timeout=60.0) as client:
-                resp = client.post(url, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                content = data.get("message", {}).get("content", "")
-                elapsed = time.time() - start
-                self._stats.total_llm_calls += 1
-                tokens = data.get("eval_count", len(content) // 4)
-                self._stats.total_tokens += tokens
-                logger.debug(
-                    "%s LLM call: %d tokens in %.1fs",
-                    self.AGENT_NAME, tokens, elapsed,
-                )
-                return content.strip()
+            data = await asyncio.to_thread(_do_request)
+            content = data.get("message", {}).get("content", "")
+            elapsed = time.time() - start
+            self._stats.total_llm_calls += 1
+            tokens = data.get("eval_count", len(content) // 4)
+            self._stats.total_tokens += tokens
+            logger.debug(
+                "%s LLM call: %d tokens in %.1fs",
+                self.AGENT_NAME, tokens, elapsed,
+            )
+            return content.strip()
         except Exception as exc:
             logger.warning("%s LLM call failed: %s", self.AGENT_NAME, exc)
             self._stats.errors += 1

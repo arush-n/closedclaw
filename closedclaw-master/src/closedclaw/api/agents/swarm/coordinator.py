@@ -5,6 +5,7 @@ Routes tasks to agents via deterministic pipelines (no LLM call for routing).
 Enforces sequential execution, circuit breakers, token budgets, and crypto signing.
 """
 
+import asyncio
 import logging
 import time
 from datetime import datetime, timezone
@@ -338,6 +339,47 @@ class SwarmCoordinator:
                 elif payload.get("all_blocked"):
                     status = "blocked"
                 # Don't break — let downstream agents see the decision
+
+        # ── Post-pipeline persistence for STORE_MEMORY ──────────────
+        # The maker extracts facts, governance/policy validate them, but
+        # nobody in the pipeline actually writes to mem0.  Do it here.
+        if task.task_type == SwarmTaskType.STORE_MEMORY and status == "completed":
+            facts_to_store = context.get("compliant_facts") or context.get("extracted_facts") or []
+            stored_ids = []
+
+            # Filter to substantial facts (>20 chars). If none qualify,
+            # fall back to storing the original raw text as one memory.
+            substantial = [f for f in facts_to_store if len(f.get("content", "")) > 20]
+            if not substantial:
+                raw = task.input_data.get("raw_text", task.input_data.get("content", ""))
+                if raw:
+                    substantial = [{"content": raw, "sensitivity": 1, "tags": [], "source": "swarm_store"}]
+
+            for fact in substantial:
+                content = fact.get("content", "")
+                if not content:
+                    continue
+                try:
+                    result = await asyncio.to_thread(
+                        self._memory.add,
+                        content=content,
+                        user_id=task.user_id,
+                        sensitivity=fact.get("sensitivity", 1),
+                        tags=fact.get("tags", []),
+                        source=fact.get("source", "swarm_store"),
+                    )
+                    # Extract the stored memory ID if available
+                    if isinstance(result, dict):
+                        res = result.get("result", result)
+                        results_list = res.get("results", []) if isinstance(res, dict) else []
+                        for r in results_list:
+                            if r.get("id"):
+                                stored_ids.append(r["id"])
+                    logger.info("Stored memory for user %s: %s", task.user_id, content[:80])
+                except Exception as exc:
+                    logger.error("Failed to store memory: %s", exc)
+            context["stored_memory_ids"] = stored_ids
+            context["memories_stored"] = len(stored_ids)
 
         duration_ms = (time.time() - start) * 1000
 

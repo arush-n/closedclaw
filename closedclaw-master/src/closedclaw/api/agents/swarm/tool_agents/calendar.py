@@ -52,7 +52,7 @@ class CalendarAgent(BaseAgent):
             )
 
         # Parse event details via LLM
-        raw = self._call_llm(
+        raw = await self._call_llm(
             EVENT_PARSE_PROMPT.format(prompt=prompt[:500]),
             temperature=0.1,
             max_tokens=300,

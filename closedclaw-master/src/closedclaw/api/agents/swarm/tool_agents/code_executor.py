@@ -84,7 +84,7 @@ class CodeExecutorAgent(BaseAgent):
 
         # LLM safety analysis
         prompt = SAFETY_PROMPT.format(language=language, code=code[:1000])
-        raw = self._call_llm(prompt, temperature=0.1, max_tokens=200)
+        raw = await self._call_llm(prompt, temperature=0.1, max_tokens=200)
         analysis = self._parse_json_object(raw)
 
         approved = analysis.get("safe", False) and analysis.get("risk_level") != "high"

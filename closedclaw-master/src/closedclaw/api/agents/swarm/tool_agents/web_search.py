@@ -65,7 +65,7 @@ class WebSearchAgent(BaseAgent):
 
         # Extract search intent via LLM
         intent_prompt = SEARCH_INTENT_PROMPT.format(prompt=prompt[:500])
-        raw = self._call_llm(intent_prompt, temperature=0.1, max_tokens=200)
+        raw = await self._call_llm(intent_prompt, temperature=0.1, max_tokens=200)
         intent = self._parse_json_object(raw)
 
         query = intent.get("query", prompt)

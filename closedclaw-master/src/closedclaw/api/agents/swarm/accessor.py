@@ -6,6 +6,7 @@ and context building. Applies the firewall pipeline before returning.
 Basic mode: 0 LLM calls. With query expansion: 1 LLM call.
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -17,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class AccessorAgent(BaseAgent):
     AGENT_NAME = "accessor"
+    MODEL_TIER = "light"  # qwen3.5:0.8b — query expansion (generate 2 alternative queries)
 
     EXPAND_PROMPT = """Given this user query, generate 2 alternative search queries that might find related memories. Return a JSON array of strings.
 
@@ -44,7 +46,7 @@ JSON array:"""
             )
 
         # Step 1: Direct semantic search (no LLM)
-        memories = self._search(query, user_id, sensitivity_max, limit)
+        memories = await self._search(query, user_id, sensitivity_max, limit)
 
         # Step 2: Graph traversal — follow related_ids for richer context
         expanded = self._expand_via_graph(memories, user_id, sensitivity_max)
@@ -53,7 +55,7 @@ JSON array:"""
         # Step 3: Optional query expansion if too few results
         llm_calls = 0
         if len(all_memories) < 3 and len(query) > 15:
-            extra, calls = self._query_expand(query, user_id, sensitivity_max, all_memories)
+            extra, calls = await self._query_expand(query, user_id, sensitivity_max, all_memories)
             all_memories.extend(extra)
             llm_calls += calls
 
@@ -83,10 +85,11 @@ JSON array:"""
             in_reply_to=message.message_id,
         )
 
-    def _search(self, query: str, user_id: str, sensitivity_max: int, limit: int) -> list:
-        """Semantic search via the memory manager."""
+    async def _search(self, query: str, user_id: str, sensitivity_max: int, limit: int) -> list:
+        """Semantic search via the memory manager (non-blocking)."""
         try:
-            results = self._memory.search(
+            results = await asyncio.to_thread(
+                self._memory.search,
                 query=query,
                 user_id=user_id,
                 sensitivity_max=sensitivity_max,
@@ -133,12 +136,12 @@ JSON array:"""
 
         return expanded
 
-    def _query_expand(
+    async def _query_expand(
         self, query: str, user_id: str, sensitivity_max: int, existing: list
     ) -> tuple:
         """Use LLM to generate alternative search queries (1 call)."""
         prompt = self.EXPAND_PROMPT.format(query=query[:200])
-        raw = self._call_llm(prompt, temperature=0.3, max_tokens=150)
+        raw = await self._call_llm(prompt, temperature=0.3, max_tokens=150)
         sub_queries = self._parse_json_array(raw)
         if not sub_queries:
             # Try parsing as list of strings
@@ -153,7 +156,7 @@ JSON array:"""
         extra = []
         for sq in sub_queries[:2]:
             if isinstance(sq, str):
-                results = self._search(sq, user_id, sensitivity_max, limit=5)
+                results = await self._search(sq, user_id, sensitivity_max, limit=5)
                 for r in results:
                     rid = r.get("id") if isinstance(r, dict) else getattr(r, "id", None)
                     if rid and rid not in existing_ids:

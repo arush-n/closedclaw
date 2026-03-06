@@ -4,6 +4,7 @@ Memory API endpoints for closedclaw.
 Provides CRUD operations for the memory vault with privacy controls.
 """
 
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -48,7 +49,8 @@ async def search_memories(
     tag_list = tags.split(",") if tags else None
     
     try:
-        results = memory.search(
+        results = await asyncio.to_thread(
+            memory.search,
             query=q,
             user_id=user_id,
             sensitivity_max=sensitivity_max,
@@ -81,7 +83,8 @@ async def add_memory(
     Memory will be classified for sensitivity and encrypted at rest.
     """
     try:
-        result = memory.add(
+        result = await asyncio.to_thread(
+            memory.add,
             content=memory_create.content,
             user_id=memory_create.user_id or "default",
             sensitivity=memory_create.sensitivity,
@@ -164,7 +167,8 @@ async def add_memory_from_messages(
             for msg in request.messages
         )
         
-        result = memory.add(
+        result = await asyncio.to_thread(
+            memory.add,
             content=message_text,
             user_id=request.user_id or "default",
             source="conversation",

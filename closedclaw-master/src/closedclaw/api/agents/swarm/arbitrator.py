@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ArbitratorAgent(BaseAgent):
     AGENT_NAME = "arbitrator"
+    MODEL_TIER = "medium"  # qwen3.5:2b — constitutional conflict resolution
 
     ARBITRATION_PROMPT = """{few_shot}You are an impartial arbitrator resolving a conflict between two AI agents in a privacy-first memory system.
 
@@ -99,7 +100,7 @@ JSON:"""
             provider=provider,
         )
 
-        raw = self._call_llm(prompt, temperature=0.3, max_tokens=300)
+        raw = await self._call_llm(prompt, temperature=0.3, max_tokens=300)
         decision = self._parse_json_object(raw)
 
         winner = decision.get("winner", "")

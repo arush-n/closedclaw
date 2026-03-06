@@ -94,7 +94,7 @@ JSON:"""
 
                 if resolution is None and llm_calls == 0:
                     # Ambiguous — use LLM (max 1 call per invocation)
-                    resolution = self._llm_copyright_check(mem)
+                    resolution = await self._llm_copyright_check(mem)
                     llm_calls += 1
 
                 if resolution is None:
@@ -238,7 +238,7 @@ JSON:"""
 
         return None  # Ambiguous — needs LLM
 
-    def _llm_copyright_check(self, memory: Dict[str, Any]) -> dict | None:
+    async def _llm_copyright_check(self, memory: Dict[str, Any]) -> dict | None:
         """Use LLM to resolve copyright ambiguity (1 call)."""
         content = memory.get("content", memory.get("memory", ""))[:500]
         source = memory.get("source", "unknown")
@@ -249,7 +249,7 @@ JSON:"""
             source=source,
             tags=", ".join(tags[:10]),
         )
-        raw = self._call_llm(prompt, temperature=0.1, max_tokens=200)
+        raw = await self._call_llm(prompt, temperature=0.1, max_tokens=200)
         result = self._parse_json_object(raw)
 
         if result.get("action") in ("cite", "suppress", "permit"):

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 class PolicyAgent(BaseAgent):
     AGENT_NAME = "policy"
+    MODEL_TIER = "light"  # qwen3.5:0.8b — structured JSON rule generation from patterns
 
     RULE_GENERATION_PROMPT = """{few_shot}Based on these consent patterns and the user's constitution, suggest privacy rules.
 
@@ -125,7 +126,7 @@ JSON:"""
             principles=self._constitution.principles_summary(),
             patterns=json.dumps(patterns[:10], default=str)[:800],
         )
-        raw = self._call_llm(prompt, temperature=0.1, max_tokens=600)
+        raw = await self._call_llm(prompt, temperature=0.1, max_tokens=600)
         rules = self._parse_json_array(raw)
 
         if rules:
@@ -156,7 +157,7 @@ JSON:"""
             actions=json.dumps(actions[:10], default=str)[:600],
             principles=self._constitution.principles_summary(),
         )
-        raw = self._call_llm(prompt, temperature=0.1, max_tokens=300)
+        raw = await self._call_llm(prompt, temperature=0.1, max_tokens=300)
         proposal = self._parse_json_object(raw)
 
         amendment = None

@@ -56,7 +56,12 @@ class LocalEngineSettings(BaseSettings):
     # Fast model for lightweight tasks (PII detection, classification, insights)
     fast_model: str = Field(
         default="",
-        description="Small fast model for lightweight tasks. Empty = use llm_model for everything."
+        description="Medium model for structured extraction tasks. Empty = use llm_model."
+    )
+    # Light model for trivial tasks (query expansion, simple JSON generation)
+    light_model: str = Field(
+        default="",
+        description="Smallest/fastest model for trivial tasks. Empty = use fast_model."
     )
     llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     llm_max_tokens: int = Field(default=2000, ge=1, le=32768)
@@ -97,26 +102,38 @@ class LocalEngineSettings(BaseSettings):
         description="Automatically pull models if not installed"
     )
 
-    def get_fast_ollama_model(self) -> str:
-        """Resolve the Ollama model name for the fast (lightweight) tier.
+    def get_light_ollama_model(self) -> str:
+        """Resolve model for the light tier (query expansion, simple JSON).
+        Auto-selects qwen3.5:0.8b (or downscaled equivalent) based on hardware."""
+        from closedclaw.api.core.local import LOCAL_MODELS, get_agent_model
 
-        Returns the fast_model if set, otherwise falls back to llm_model.
-        Handles both LOCAL_MODELS keys and raw Ollama model names.
-        """
-        from closedclaw.api.core.local import LOCAL_MODELS
+        key = self.light_model.strip() if self.light_model else ""
+        if not key:
+            return get_agent_model("light", self.hardware_profile)
+        if key in LOCAL_MODELS:
+            return LOCAL_MODELS[key].ollama_model
+        return key
+
+    def get_fast_ollama_model(self) -> str:
+        """Resolve model for the medium tier (structured extraction, classification).
+        Auto-selects qwen3.5:2b (or downscaled equivalent) based on hardware."""
+        from closedclaw.api.core.local import LOCAL_MODELS, get_agent_model
 
         key = self.fast_model.strip() if self.fast_model else ""
         if not key:
-            key = self.llm_model
+            return get_agent_model("medium", self.hardware_profile)
         if key in LOCAL_MODELS:
             return LOCAL_MODELS[key].ollama_model
         return key
 
     def get_full_ollama_model(self) -> str:
-        """Resolve the Ollama model name for the full (heavy) tier."""
-        from closedclaw.api.core.local import LOCAL_MODELS
+        """Resolve model for the heavy tier (hallucination detection, arbitration).
+        Auto-selects qwen3.5:4b (or downscaled equivalent) based on hardware."""
+        from closedclaw.api.core.local import LOCAL_MODELS, get_agent_model
 
-        key = self.llm_model
+        key = self.llm_model.strip() if self.llm_model else ""
+        if not key:
+            return get_agent_model("heavy", self.hardware_profile)
         if key in LOCAL_MODELS:
             return LOCAL_MODELS[key].ollama_model
         return key

@@ -17,11 +17,14 @@ logger = logging.getLogger(__name__)
 
 class MakerAgent(BaseAgent):
     AGENT_NAME = "maker"
+    MODEL_TIER = "medium"  # qwen3.5:2b — structured fact extraction + sensitivity classification
 
     EXTRACT_PROMPT = """{few_shot}Extract key facts from this text as a JSON array.
-Each fact: {{"content": "...", "tags": [...], "category": "...", "sensitivity_hint": 0-3}}
+Each fact: {{"content": "a complete sentence describing the fact", "tags": [...], "category": "...", "sensitivity_hint": 0-3}}
 sensitivity: 0=public, 1=general, 2=personal, 3=sensitive (medical/financial/legal)
-Only extract facts worth remembering. Be concise. Max 5 facts.
+IMPORTANT: Each "content" MUST be a full, self-contained sentence (not just a keyword).
+Example: "The user's favorite programming language is Rust." — NOT just "Rust".
+Only extract facts worth remembering. Max 5 facts.
 
 Text: {text}
 
@@ -69,7 +72,7 @@ JSON:"""
             few_shot=few_shot,
             text=raw_text[:2000],
         )
-        raw_response = self._call_llm(prompt, temperature=0.2, max_tokens=600)
+        raw_response = await self._call_llm(prompt, temperature=0.2, max_tokens=600)
         facts = self._parse_json_array(raw_response)
 
         if not facts:
@@ -147,7 +150,7 @@ JSON:"""
             for m in memories[:10]
         )
         prompt = self.COMPACT_PROMPT.format(memories=mem_text)
-        raw = self._call_llm(prompt, temperature=0.1, max_tokens=300)
+        raw = await self._call_llm(prompt, temperature=0.1, max_tokens=300)
         merged = self._parse_json_object(raw)
 
         if not merged.get("content"):
@@ -185,7 +188,7 @@ Each: {{"content": "...", "tags": [...], "category": "...", "sensitivity_hint": 
 
 JSON array:"""
 
-        raw = self._call_llm(prompt, temperature=0.2, max_tokens=800)
+        raw = await self._call_llm(prompt, temperature=0.2, max_tokens=800)
         facts = self._parse_json_array(raw)
 
         return self._make_response(

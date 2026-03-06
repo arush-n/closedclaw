@@ -53,7 +53,7 @@ class EmailAgent(BaseAgent):
             )
 
         # Parse email intent via LLM
-        raw = self._call_llm(
+        raw = await self._call_llm(
             EMAIL_INTENT_PROMPT.format(prompt=prompt[:500]),
             temperature=0.1,
             max_tokens=400,

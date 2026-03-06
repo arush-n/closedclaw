@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class GovernanceAgent(BaseAgent):
     AGENT_NAME = "governance"
+    MODEL_TIER = "none"  # No LLM — pure PrivacyFirewall + PolicyEngine rule evaluation
 
     async def handle(self, message: AgentMessage, context: Dict[str, Any]) -> AgentMessage:
         action = message.payload.get("action", "evaluate_access")

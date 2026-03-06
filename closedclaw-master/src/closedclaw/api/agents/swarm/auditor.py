@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class AuditorAgent(BaseAgent):
     AGENT_NAME = "auditor"
+    MODEL_TIER = "none"  # No LLM — pure crypto verification + hash chain
 
     async def handle(self, message: AgentMessage, context: Dict[str, Any]) -> AgentMessage:
         action = message.payload.get("action", message.payload.get("input_data", {}).get("action", "verify_chain"))
