@@ -31,20 +31,20 @@ llm:
     model: "llama3.2:3b"
     temperature: 0.1
     max_tokens: 2000
-    ollama_base_url: "http://ollama:11434"
+    ollama_base_url: "http://localhost:11434"
 
 # --- Embedder ---
 embedder:
   provider: "ollama"
   config:
     model: "nomic-embed-text"
-    ollama_base_url: "http://ollama:11434"
+    ollama_base_url: "http://localhost:11434"
 
 # --- Vector Store ---
 vector_store:
   provider: "qdrant"
   config:
-    host: "mem0-store"
+    host: "localhost"
     port: 6333
     collection_name: "openclaw_memories"
 
@@ -90,21 +90,21 @@ enable_graph: false   # Graph relationships (requires Neo4j)
 # How openclaw connects to closedclaw's controlled services
 bridge:
   enabled: true
-  url: "http://control-bridge:9000"
+  url: "http://localhost:8765/v1/bridge"
   
   # These replace direct access to restricted services
   mcp_endpoints:
-    email: "http://control-bridge:9000/mcp/email"
-    calendar: "http://control-bridge:9000/mcp/calendar"
-    files: "http://control-bridge:9000/mcp/files"
-    gmail: "http://control-bridge:9000/mcp/gmail"
-    notion: "http://control-bridge:9000/mcp/notion"
-    drive: "http://control-bridge:9000/mcp/drive"
-    slack: "http://control-bridge:9000/mcp/slack"
-    github: "http://control-bridge:9000/mcp/github"
+    email: "http://localhost:8765/v1/bridge/mcp/email"
+    calendar: "http://localhost:8765/v1/bridge/mcp/calendar"
+    files: "http://localhost:8765/v1/bridge/mcp/files"
+    gmail: "http://localhost:8765/v1/bridge/mcp/gmail"
+    notion: "http://localhost:8765/v1/bridge/mcp/notion"
+    drive: "http://localhost:8765/v1/bridge/mcp/drive"
+    slack: "http://localhost:8765/v1/bridge/mcp/slack"
+    github: "http://localhost:8765/v1/bridge/mcp/github"
   
   # Health check
-  health_check_url: "http://control-bridge:9000/health"
+  health_check_url: "http://localhost:8765/v1/bridge/health"
 
 # --- Tool Access Control ---
 # Granular permissions for what openclaw can do with each service
