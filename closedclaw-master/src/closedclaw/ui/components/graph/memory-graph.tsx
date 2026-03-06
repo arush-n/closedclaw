@@ -466,9 +466,6 @@ export const MemoryGraph = memo<MemoryGraphProps>(function MemoryGraph({
         const rect = containerRef.current?.getBoundingClientRect();
         if (rect) {
           mousePosRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-          if (hoverTooltip) {
-            setHoverTooltip((prev) => prev ? { ...prev, x: mousePosRef.current.x, y: mousePosRef.current.y } : null);
-          }
         }
       }}
     >

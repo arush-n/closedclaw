@@ -241,18 +241,22 @@ class TestPrivacyPipeline:
 
     def test_sensitivity_keywords(self):
         from closedclaw.api.core.memory import ClosedclawMemory
+        from closedclaw.api.privacy.classifier import SensitivityClassifier
 
         mem = ClosedclawMemory.__new__(ClosedclawMemory)
         mem.default_sensitivity = 0  # mock attribute
+        mem._classifier = SensitivityClassifier(default_sensitivity=0)
         # Should classify health data as high sensitivity ("diagnosis" is a Level 3 keyword)
         level = mem._classify_sensitivity("My diagnosis is diabetes")
         assert level >= 2
 
     def test_sensitivity_low_for_generic(self):
         from closedclaw.api.core.memory import ClosedclawMemory
+        from closedclaw.api.privacy.classifier import SensitivityClassifier
 
         mem = ClosedclawMemory.__new__(ClosedclawMemory)
         mem.default_sensitivity = 0  # mock attribute
+        mem._classifier = SensitivityClassifier(default_sensitivity=0)
         level = mem._classify_sensitivity("I like pizza")
         assert level <= 1
 

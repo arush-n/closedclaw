@@ -27,7 +27,8 @@ export function useForceSimulation(
 ): ForceSimulationControls {
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
   const lastTickTimeRef = useRef(0);
-  const tickThrottleMs = nodes.length > 100 ? 50 : 33; // Lower framerate for big graphs
+  // Aggressive throttling for large graphs to save CPU
+  const tickThrottleMs = nodes.length > 200 ? 100 : nodes.length > 100 ? 66 : 33;
 
   useEffect(() => {
     if (!enabled || nodes.length === 0) {

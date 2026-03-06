@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_smoke.py -v)",
+      "Bash(pip install -e .)",
+      "Bash(python -m pytest --version)",
+      "Bash(python -m pip install -e .)",
+      "Bash(python -m pytest tests/test_persistence_encryption.py tests/test_proxy_fix.py -v)",
+      "Bash(wmic process where \"name=''node.exe''\" get ProcessId,CommandLine)",
+      "Bash(wmic process where \"name=''python.exe'' and ProcessId!=$$\" get ProcessId,CommandLine)",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Select-Object Id, Path | Format-Table -AutoSize\")",
+      "Bash(taskkill //F //PID 114996)",
+      "Bash(docker --version)",
+      "Bash(docker compose up -d --build)",
+      "Bash(docker info)",
+      "Bash(docker exec closedclaw-ollama sh -c 'ollama run qwen3.5:0.8b \"\"say hello\"\" --verbose 2>&1')",
+      "Bash(docker compose up -d)",
+      "Bash(ollama run qwen3.5:0.8b \"say hello in 3 words\" --verbose)",
+      "Bash(docker compose up -d --force-recreate closedclaw-dashboard closedclaw-server)",
+      "Bash(docker compose ps --format \"table {{.Name}}\\\\t{{.Status}}\\\\t{{.Ports}}\")",
+      "Bash(grep -l \"openmemory\\\\|/apps/\" /c/Users/rush/closedclaw/closedclaw-master/src/closedclaw/api/routes/*.py)",
+      "Bash(docker exec closedclaw-server ls /root/.closedclaw/)",
+      "Bash(docker exec closedclaw-server bash -c \"ls /root/.closedclaw/\")",
+      "Bash(docker exec closedclaw-server bash -c \"cat /root/.closedclaw/token\")",
+      "Bash(docker exec closedclaw-dashboard bash -c \"cat /root/.closedclaw/token\")",
+      "Bash(curl -s http://localhost:3001/api/config)",
+      "Bash(curl -s http://localhost:3001/api/memories?limit=5)",
+      "Bash(curl -s http://localhost:6333/collections)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:6333/collections/closedclaw_memories)",
+      "Bash(curl -s \"http://localhost:6333/collections/closedclaw_memories/points/scroll\" -H \"Content-Type: application/json\" -d '{\"\"limit\"\": 3}')",
+      "Bash(python3 -c \"import sys,json; [print\\(c[''name'']\\) for c in json.load\\(sys.stdin\\)[''result''][''collections'']]\")"
+    ]
+  }
+}

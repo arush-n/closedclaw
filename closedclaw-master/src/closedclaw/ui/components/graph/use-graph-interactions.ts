@@ -45,6 +45,12 @@ export function useGraphInteractions(): GraphInteractionsState & GraphInteractio
   const draggedNode = useRef<GraphNode | null>(null);
   const dragStartPos = useRef({ x: 0, y: 0 });
 
+  // Refs for current values to avoid stale closures in RAF callbacks
+  const panRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(GRAPH_SETTINGS.initialZoom);
+  const panRafId = useRef<number | null>(null);
+  const zoomRafId = useRef<number | null>(null);
+
   const handlePanStart = useCallback((e: React.MouseEvent) => {
     if (draggingNodeId) return;
     isPanning.current = true;
@@ -53,14 +59,24 @@ export function useGraphInteractions(): GraphInteractionsState & GraphInteractio
 
   const handlePanMove = useCallback((e: React.MouseEvent) => {
     if (!isPanning.current) return;
-    
+
     const dx = e.clientX - lastMousePos.current.x;
     const dy = e.clientY - lastMousePos.current.y;
-    
-    setPanX((prev) => prev + dx);
-    setPanY((prev) => prev + dy);
-    
     lastMousePos.current = { x: e.clientX, y: e.clientY };
+
+    // Accumulate in ref, flush via RAF to batch updates
+    panRef.current.x += dx;
+    panRef.current.y += dy;
+
+    if (panRafId.current === null) {
+      panRafId.current = requestAnimationFrame(() => {
+        const accumulated = panRef.current;
+        setPanX((prev) => prev + accumulated.x);
+        setPanY((prev) => prev + accumulated.y);
+        panRef.current = { x: 0, y: 0 };
+        panRafId.current = null;
+      });
+    }
   }, []);
 
   const handlePanEnd = useCallback(() => {
@@ -69,26 +85,27 @@ export function useGraphInteractions(): GraphInteractionsState & GraphInteractio
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    
+
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    
+
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.max(
-      GRAPH_SETTINGS.minZoom,
-      Math.min(GRAPH_SETTINGS.maxZoom, zoom * zoomFactor)
-    );
-    
-    // Zoom towards mouse position
-    const scaleDiff = newZoom - zoom;
-    const newPanX = panX - (mouseX - panX) * (scaleDiff / zoom);
-    const newPanY = panY - (mouseY - panY) * (scaleDiff / zoom);
-    
-    setZoom(newZoom);
-    setPanX(newPanX);
-    setPanY(newPanY);
-  }, [zoom, panX, panY]);
+
+    // Use functional updates to avoid stale closure on zoom/panX/panY
+    setZoom((prevZoom) => {
+      const newZoom = Math.max(
+        GRAPH_SETTINGS.minZoom,
+        Math.min(GRAPH_SETTINGS.maxZoom, prevZoom * zoomFactor)
+      );
+      const scaleDiff = newZoom - prevZoom;
+
+      setPanX((prevPanX) => prevPanX - (mouseX - prevPanX) * (scaleDiff / prevZoom));
+      setPanY((prevPanY) => prevPanY - (mouseY - prevPanY) * (scaleDiff / prevZoom));
+
+      return newZoom;
+    });
+  }, []);
 
   const handleNodeHover = useCallback((nodeId: string | null) => {
     setHoveredNode(nodeId);
@@ -109,7 +126,7 @@ export function useGraphInteractions(): GraphInteractionsState & GraphInteractio
       setDraggingNodeId(nodeId);
       draggedNode.current = node;
       dragStartPos.current = { x: e.clientX, y: e.clientY };
-      
+
       // Fix the node position during drag
       node.fx = node.x;
       node.fy = node.y;
@@ -166,18 +183,19 @@ export function useGraphInteractions(): GraphInteractionsState & GraphInteractio
     (nodes: GraphNode[], width: number, height: number) => {
       if (nodes.length === 0) return;
 
-      // Calculate bounding box
+      // Calculate bounding box in a single pass
       let minX = Infinity,
         maxX = -Infinity,
         minY = Infinity,
         maxY = -Infinity;
 
-      nodes.forEach((node) => {
-        minX = Math.min(minX, node.x);
-        maxX = Math.max(maxX, node.x);
-        minY = Math.min(minY, node.y);
-        maxY = Math.max(maxY, node.y);
-      });
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        if (node.x < minX) minX = node.x;
+        if (node.x > maxX) maxX = node.x;
+        if (node.y < minY) minY = node.y;
+        if (node.y > maxY) maxY = node.y;
+      }
 
       const graphWidth = maxX - minX + 200;
       const graphHeight = maxY - minY + 200;

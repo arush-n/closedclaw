@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { closedclawRequest, getClosedclawApiUrl, buildClosedclawHeaders } from "@/app/api/_lib/closedclaw";
+import { getOpenMemoryUrl } from "@/app/api/_lib/openmemory";
 
 // Types for closedclaw memory response
 interface Memory {
@@ -50,122 +51,27 @@ const REQUEST_TIMEOUT_MS = 3_000;
 const responseCache = new Map<string, CacheEntry>();
 let preferredEndpoint = 0;
 
-const demoMemories: Memory[] = [
-  {
-    id: "demo-1",
-    memory: "I prefer TypeScript over JavaScript for larger projects",
-    user_id: "demo-user",
-    categories: ["preference", "programming"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-  },
-  {
-    id: "demo-2",
-    memory: "Working on a machine learning project using PyTorch",
-    user_id: "demo-user",
-    categories: ["work", "machine-learning"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-  },
-  {
-    id: "demo-3",
-    memory: "Favorite color is blue, especially in dark mode UIs",
-    user_id: "demo-user",
-    categories: ["preference", "design"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-  },
-  {
-    id: "demo-4",
-    memory: "Learning about graph databases and Neo4j",
-    user_id: "demo-user",
-    categories: ["learning", "databases"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 72).toISOString(),
-  },
-  {
-    id: "demo-5",
-    memory: "Interested in AI agents and autonomous systems",
-    user_id: "demo-user",
-    categories: ["interest", "ai"],
-    created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-  },
-  {
-    id: "demo-6",
-    memory: "Prefers dark mode for coding environments",
-    user_id: "demo-user",
-    categories: ["preference", "programming"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
-  },
-  {
-    id: "demo-7",
-    memory: "Uses VSCode with GitHub Copilot for development",
-    user_id: "demo-user",
-    categories: ["tools", "programming"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-  },
-  {
-    id: "demo-8",
-    memory: "Building a memory system similar to supermemory",
-    user_id: "demo-user",
-    categories: ["work", "project"],
-    created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-  },
-  {
-    id: "demo-9",
-    memory: "Exploring D3.js for data visualization",
-    user_id: "demo-user",
-    categories: ["learning", "visualization"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 36).toISOString(),
-  },
-  {
-    id: "demo-10",
-    memory: "Interested in force-directed graph layouts",
-    user_id: "demo-user",
-    categories: ["interest", "visualization"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
-  },
-  {
-    id: "demo-11",
-    memory: "Research on neural networks and deep learning",
-    user_id: "demo-user-2",
-    categories: ["research", "machine-learning"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 96).toISOString(),
-  },
-  {
-    id: "demo-12",
-    memory: "Prefers Python for data science tasks",
-    user_id: "demo-user-2",
-    categories: ["preference", "programming"],
-    created_at: new Date(Date.now() - 1000 * 60 * 60 * 120).toISOString(),
-  },
-];
-
-function buildSyntheticMemories(userId: string, targetCount = 180): Memory[] {
-  const topics = [
-    "privacy",
-    "security",
-    "graph analytics",
-    "AI agents",
-    "debugging",
-    "policy enforcement",
-    "memory retrieval",
-    "performance tuning",
-    "developer tooling",
-    "consent workflows",
-  ];
-
-  const seeded: Memory[] = [];
-  for (let index = 0; index < targetCount; index++) {
-    const topic = topics[index % topics.length] || "engineering";
-    const ageHours = 2 + index * 3;
-    seeded.push({
-      id: `seed-${userId}-${index + 1}`,
-      memory: `Scale memory ${index + 1}: user discussed ${topic} strategy, implementation details, and follow-up actions for closedclaw.`,
-      user_id: userId,
-      categories: ["scale", topic, "autoseed"],
-      tags: ["scale", topic, "autoseed"],
-      created_at: new Date(Date.now() - ageHours * 60 * 60 * 1000).toISOString(),
-    });
+// Fetch memories from openmemory-mcp as secondary source
+async function fetchOpenMemoryMemories(userId: string, limit: number): Promise<Memory[]> {
+  try {
+    const omUrl = getOpenMemoryUrl();
+    const url = `${omUrl}/api/v1/memories/?user_id=${encodeURIComponent(userId)}&page_size=${limit}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+      if (response.ok) {
+        const data = await response.json();
+        const items = data?.results || data?.items || [];
+        return normalizeMemories(items);
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    // openmemory unavailable
   }
-
-  return seeded;
+  return [];
 }
 
 // Normalize different API response formats
@@ -304,9 +210,12 @@ export async function GET(request: NextRequest) {
       if (response.ok) {
         const data = await response.json();
         let memories = normalizeMemories(data).slice(0, limit);
+
+        // If closedclaw server returned no memories, also try openmemory-mcp
         if (memories.length === 0) {
-          memories = buildSyntheticMemories(userId || "default", Math.max(120, limit));
+          memories = await fetchOpenMemoryMemories(userId || "default-user", limit);
         }
+
         preferredEndpoint = requestCandidates.findIndex(
           (item) => item.url === candidate.url
         );
@@ -321,7 +230,7 @@ export async function GET(request: NextRequest) {
           expiresAt: Date.now() + RESPONSE_CACHE_TTL_MS,
           payload,
         });
-        
+
         return NextResponse.json(payload, {
           headers: { "Cache-Control": "private, max-age=10" },
         });
@@ -334,14 +243,15 @@ export async function GET(request: NextRequest) {
     }
   }
   
-  // If all endpoints fail, return sample data for demo
-  console.warn("All closedclaw endpoints failed, returning demo data:", lastError?.message);
-  
+  // If all closedclaw endpoints fail, try openmemory-mcp as last resort
+  console.warn("All closedclaw endpoints failed, trying openmemory:", lastError?.message);
+
+  const omMemories = await fetchOpenMemoryMemories(userId || "default-user", limit);
+
   const payload = {
     success: true,
-    memories: buildSyntheticMemories(userId || "default", Math.max(120, limit)),
-    count: Math.max(120, limit),
-    demo: true,
+    memories: omMemories,
+    count: omMemories.length,
   };
 
   responseCache.set(cacheKey, {

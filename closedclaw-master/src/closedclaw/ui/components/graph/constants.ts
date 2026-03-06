@@ -67,23 +67,23 @@ export const SIMILARITY_CONFIG = {
   maxComparisonsPerNode: 8,
 };
 
-// D3-Force simulation configuration
+// D3-Force simulation configuration — tuned for smooth, fast settling
 export const FORCE_CONFIG = {
   linkStrength: {
-    similarity: 0.3,
-    memoryUser: 0.5,
-    memoryMemory: 0.2,
+    similarity: 0.25,
+    memoryUser: 0.4,
+    memoryMemory: 0.15,
   },
-  linkDistance: 250,
-  chargeStrength: -800,
+  linkDistance: 200,
+  chargeStrength: -500,
   collisionRadius: {
-    memory: 45,
-    user: 60,
+    memory: 40,
+    user: 55,
   },
-  alphaDecay: 0.03,
-  alphaMin: 0.001,
-  velocityDecay: 0.6,
-  alphaTarget: 0.3,
+  alphaDecay: 0.05,
+  alphaMin: 0.002,
+  velocityDecay: 0.7,
+  alphaTarget: 0.25,
 };
 
 // Graph view settings

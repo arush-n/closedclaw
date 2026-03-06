@@ -203,7 +203,7 @@ class Settings(BaseSettings):
         description="Embedding model (cloud provider)"
     )
     local_model: str = Field(
-        default="llama3.2:latest",
+        default="qwen3.5:4b",
         description="Local Ollama model for privacy-sensitive operations"
     )
 
@@ -518,7 +518,15 @@ def init_local_engine(settings: Optional[Settings] = None, fast_startup: bool = 
             embed_model_name = LOCAL_EMBEDDING_MODELS[embed_model_key].ollama_model
             if not _has_model(installed_models, embed_model_name) and manager.ensure_model(embed_model_name, installed_models):
                 updated = True
-        
+
+        # Ensure agent tier models (qwen3.5 family) are available
+        from closedclaw.api.core.local import AGENT_MODELS_BY_PROFILE, HardwareProfile as HP
+        hw_profile = HP(status.get("hardware_profile", "standard"))
+        agent_tier_map = AGENT_MODELS_BY_PROFILE.get(hw_profile, AGENT_MODELS_BY_PROFILE[HP.STANDARD])
+        for tier_model in set(agent_tier_map.values()):
+            if not _has_model(installed_models, tier_model) and manager.ensure_model(tier_model, installed_models):
+                updated = True
+
         # Refresh available models
         if updated:
             status["models_available"] = manager.get_installed_models()

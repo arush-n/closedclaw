@@ -66,29 +66,30 @@ export const GraphCanvas = memo<GraphCanvasProps>(
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = "low"; // "low" is much faster than "high"
+      ctx.imageSmoothingQuality = "low";
     }, []);
 
-    // Spatial grid for optimized hit detection
+    // Spatial grid in WORLD coordinates — only rebuilds when nodes change, not on pan/zoom
     const spatialGrid = useMemo(() => {
       const GRID_CELL_SIZE = 150;
       const grid = new Map<string, GraphNode[]>();
 
-      nodes.forEach((node) => {
-        const screenX = node.x * zoom + panX;
-        const screenY = node.y * zoom + panY;
-        const cellX = Math.floor(screenX / GRID_CELL_SIZE);
-        const cellY = Math.floor(screenY / GRID_CELL_SIZE);
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
+        const cellX = Math.floor(node.x / GRID_CELL_SIZE);
+        const cellY = Math.floor(node.y / GRID_CELL_SIZE);
         const cellKey = `${cellX},${cellY}`;
 
-        if (!grid.has(cellKey)) {
-          grid.set(cellKey, []);
+        let bucket = grid.get(cellKey);
+        if (!bucket) {
+          bucket = [];
+          grid.set(cellKey, bucket);
         }
-        grid.get(cellKey)!.push(node);
-      });
+        bucket.push(node);
+      }
 
       return { grid, cellSize: GRID_CELL_SIZE };
-    }, [nodes, panX, panY, zoom]);
+    }, [nodes]);
 
     useEffect(() => {
       const map = new Map<string, GraphNode>();
@@ -98,12 +99,15 @@ export const GraphCanvas = memo<GraphCanvasProps>(
       nodeMapRef.current = map;
     }, [nodes]);
 
-    // Efficient hit detection
+    // Efficient hit detection — converts screen coords to world coords
     const getNodeAtPosition = useCallback(
-      (x: number, y: number): string | null => {
+      (screenX: number, screenY: number): string | null => {
+        const worldX = (screenX - panX) / zoom;
+        const worldY = (screenY - panY) / zoom;
+
         const { grid, cellSize } = spatialGrid;
-        const cellX = Math.floor(x / cellSize);
-        const cellY = Math.floor(y / cellSize);
+        const cellX = Math.floor(worldX / cellSize);
+        const cellY = Math.floor(worldY / cellSize);
 
         const cellsToCheck = [
           `${cellX},${cellY}`,
@@ -119,13 +123,10 @@ export const GraphCanvas = memo<GraphCanvasProps>(
 
           for (let i = cellNodes.length - 1; i >= 0; i--) {
             const node = cellNodes[i]!;
-            const screenX = node.x * zoom + panX;
-            const screenY = node.y * zoom + panY;
-            const nodeSize = node.size * zoom;
-
-            const dx = x - screenX;
-            const dy = y - screenY;
-            if (dx * dx + dy * dy <= nodeSize * nodeSize) {
+            const dx = worldX - node.x;
+            const dy = worldY - node.y;
+            const hitRadius = node.size * 1.5;
+            if (dx * dx + dy * dy <= hitRadius * hitRadius) {
               return node.id;
             }
           }
@@ -135,7 +136,8 @@ export const GraphCanvas = memo<GraphCanvasProps>(
       [spatialGrid, panX, panY, zoom]
     );
 
-    // Mouse event handlers
+    // Mouse event handlers — throttled hover detection
+    const hoverThrottleRef = useRef<number>(0);
     const handleMouseMove = useCallback(
       (e: React.MouseEvent) => {
         const rect = canvasRef.current?.getBoundingClientRect();
@@ -150,12 +152,19 @@ export const GraphCanvas = memo<GraphCanvasProps>(
           return;
         }
 
+        // Throttle hover detection to ~30fps
+        const now = performance.now();
+        if (now - hoverThrottleRef.current < 33) {
+          onPanMove(e);
+          return;
+        }
+        hoverThrottleRef.current = now;
+
         const nodeId = getNodeAtPosition(x, y);
         if (nodeId !== currentHoveredNode.current) {
           currentHoveredNode.current = nodeId;
           dirtyRef.current = true;
           onNodeHover(nodeId);
-          // Update cursor based on hover
           if (canvasRef.current) {
             canvasRef.current.style.cursor = nodeId ? "pointer" : "grab";
           }
@@ -209,7 +218,6 @@ export const GraphCanvas = memo<GraphCanvasProps>(
     const draw = useCallback(() => {
       const needsAnimation = hasNewMemoriesRef.current || !!draggingNodeId;
 
-      // Skip frame if nothing changed and no animation needed
       if (!dirtyRef.current && !needsAnimation) {
         if (isAnimatingRef.current) {
           animationRef.current = requestAnimationFrame(draw);
@@ -240,23 +248,19 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         canvas.height = nextCanvasHeight;
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
-        canvasMetricsRef.current = {
-          width: nextCanvasWidth,
-          height: nextCanvasHeight,
-          dpr,
-        };
+        canvasMetricsRef.current = { width: nextCanvasWidth, height: nextCanvasHeight, dpr };
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Clear with flat color (much cheaper than radial gradient)
+      // Clear
       ctx.fillStyle = colors.background.primary;
       ctx.fillRect(0, 0, width, height);
 
-      // Only draw grid when zoomed in enough to see it
-      if (zoom > 0.4) {
+      // Grid only when zoomed in enough
+      if (zoom > 0.5) {
         const gridSize = 24;
         ctx.save();
-        ctx.strokeStyle = "rgba(71, 85, 105, 0.08)";
+        ctx.strokeStyle = "rgba(71, 85, 105, 0.06)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let x = 0; x <= width; x += gridSize) {
@@ -271,78 +275,73 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         ctx.restore();
       }
 
-      // Draw edges — use flat strokes instead of per-edge gradients
-      ctx.save();
-      edges.forEach((edge) => {
-        const sourceNode =
-          typeof edge.source === "string"
-            ? nodeMapRef.current.get(edge.source)
-            : edge.source;
-        const targetNode =
-          typeof edge.target === "string"
-            ? nodeMapRef.current.get(edge.target)
-            : edge.target;
+      // Viewport bounds for culling
+      const pad = 80;
 
-        if (!sourceNode || !targetNode) return;
+      // Draw edges
+      ctx.save();
+      for (let i = 0; i < edges.length; i++) {
+        const edge = edges[i];
+        const sourceNode =
+          typeof edge.source === "string" ? nodeMapRef.current.get(edge.source) : edge.source;
+        const targetNode =
+          typeof edge.target === "string" ? nodeMapRef.current.get(edge.target) : edge.target;
+
+        if (!sourceNode || !targetNode) continue;
 
         const x1 = sourceNode.x * zoom + panX;
         const y1 = sourceNode.y * zoom + panY;
         const x2 = targetNode.x * zoom + panX;
         const y2 = targetNode.y * zoom + panY;
 
-        // Skip edges outside viewport
+        // Cull edges fully outside viewport
         if (
-          (x1 < -50 && x2 < -50) ||
-          (x1 > width + 50 && x2 > width + 50) ||
-          (y1 < -50 && y2 < -50) ||
-          (y1 > height + 50 && y2 > height + 50)
+          (x1 < -pad && x2 < -pad) ||
+          (x1 > width + pad && x2 > width + pad) ||
+          (y1 < -pad && y2 < -pad) ||
+          (y1 > height + pad && y2 > height + pad)
         ) {
-          return;
+          continue;
         }
 
-        // Determine edge opacity based on selection
         let opacity = edge.visualProps.opacity;
         if (selectedNodeId) {
-          const isConnected =
-            sourceNode.id === selectedNodeId || targetNode.id === selectedNodeId;
+          const isConnected = sourceNode.id === selectedNodeId || targetNode.id === selectedNodeId;
           opacity = isConnected ? 0.8 : 0.05;
         }
 
         const dx = x2 - x1;
         const dy = y2 - y1;
-        const distance = Math.hypot(dx, dy);
+        const distance = Math.sqrt(dx * dx + dy * dy);
         const edgeFade = Math.max(0.35, Math.min(1, 280 / Math.max(distance, 1)));
         const edgeOpacity = Math.min(0.9, opacity * edgeFade);
 
-        // Flat color stroke — much cheaper than createLinearGradient per edge
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.strokeStyle = edge.color.replace(/[\d.]+\)$/, `${edgeOpacity})`);
         ctx.lineWidth = Math.max(0.35, edge.visualProps.thickness * Math.max(zoom, 0.35));
         ctx.stroke();
-      });
+      }
       ctx.restore();
 
       // Draw nodes
       const time = (Date.now() - startTimeRef.current) / 1000;
 
-      nodes.forEach((node) => {
+      for (let i = 0; i < nodes.length; i++) {
+        const node = nodes[i];
         const screenX = node.x * zoom + panX;
         const screenY = node.y * zoom + panY;
         const nodeSize = node.size * zoom;
 
-        // Skip nodes outside viewport
+        // Cull nodes outside viewport
         if (
-          screenX < -nodeSize ||
-          screenX > width + nodeSize ||
-          screenY < -nodeSize ||
-          screenY > height + nodeSize
+          screenX < -nodeSize * 2 || screenX > width + nodeSize * 2 ||
+          screenY < -nodeSize * 2 || screenY > height + nodeSize * 2
         ) {
-          return;
+          continue;
         }
 
-        // Determine node opacity based on selection
         let nodeOpacity = 1;
         if (selectedNodeId && node.id !== selectedNodeId) {
           nodeOpacity = 0.3;
@@ -355,79 +354,56 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         ctx.save();
         ctx.globalAlpha = nodeOpacity;
 
-        // Draw glow only for hovered/highlighted nodes (expensive, so only when needed)
+        // Glow only for interactive nodes
         if (isHighlighted || isHovered || isDragging) {
           const gradient = ctx.createRadialGradient(
-            screenX,
-            screenY,
-            nodeSize * 0.4,
-            screenX,
-            screenY,
-            nodeSize * 3.4
+            screenX, screenY, nodeSize * 0.4,
+            screenX, screenY, nodeSize * 3.4
           );
-          gradient.addColorStop(
-            0,
-            node.type === "memory" ? colors.memory.glow : colors.user.glow
-          );
+          gradient.addColorStop(0, node.type === "memory" ? colors.memory.glow : colors.user.glow);
           gradient.addColorStop(1, "transparent");
           ctx.fillStyle = gradient;
-          ctx.fillRect(
-            screenX - nodeSize * 2,
-            screenY - nodeSize * 2,
-            nodeSize * 4,
-            nodeSize * 4
-          );
+          ctx.fillRect(screenX - nodeSize * 2, screenY - nodeSize * 2, nodeSize * 4, nodeSize * 4);
         }
 
-        // Draw node circle — flat fill for normal nodes, gradient only for hovered
+        // Node circle
         ctx.beginPath();
         ctx.arc(screenX, screenY, nodeSize, 0, Math.PI * 2);
 
-        const nodeColor =
-          node.color || (node.type === "memory" ? colors.memory.primary : colors.user.primary);
+        const nodeColor = node.color || (node.type === "memory" ? colors.memory.primary : colors.user.primary);
 
         if (isHovered || isDragging) {
-          // Gradient fill only for interactive nodes
           const gradient = ctx.createRadialGradient(
-            screenX - nodeSize * 0.3,
-            screenY - nodeSize * 0.3,
-            0,
-            screenX,
-            screenY,
-            nodeSize
+            screenX - nodeSize * 0.3, screenY - nodeSize * 0.3, 0,
+            screenX, screenY, nodeSize
           );
           gradient.addColorStop(0, nodeColor.replace(/([\d.]+)\)$/, "0.95)"));
           gradient.addColorStop(1, nodeColor);
           ctx.fillStyle = gradient;
         } else {
-          // Flat fill for non-interactive nodes (much cheaper)
           ctx.fillStyle = nodeColor;
         }
         ctx.fill();
 
-        // Draw border
-        ctx.strokeStyle =
-          node.type === "memory" ? colors.memory.border : colors.user.border;
+        // Border
+        ctx.strokeStyle = node.type === "memory" ? colors.memory.border : colors.user.border;
         ctx.lineWidth = isHovered || isDragging ? 1.2 : 0.8;
         ctx.stroke();
 
-        // Draw pulse animation for new memories
+        // Pulse for new memories (subtle)
         if (node.type === "memory" && node.data.created_at) {
           const ageMs = Date.now() - new Date(node.data.created_at).getTime();
           if (ageMs < 24 * 60 * 60 * 1000) {
-            const pulsePhase = (time * 2) % 1;
-            const pulseRadius = nodeSize * (1 + pulsePhase * 0.5);
-            const pulseOpacity = 0.3 * (1 - pulsePhase);
+            const pulsePhase = (time * 1.5) % 1; // Slower pulse
+            const pulseRadius = nodeSize * (1 + pulsePhase * 0.3); // Smaller pulse
+            const pulseOpacity = 0.2 * (1 - pulsePhase);
 
             ctx.beginPath();
             ctx.arc(screenX, screenY, pulseRadius, 0, Math.PI * 2);
-            ctx.strokeStyle = colors.status.new.replace(
-              /[\d.]+\)$/,
-              `${pulseOpacity})`
-            );
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = colors.status.new.replace(/[\d.]+\)$/, `${pulseOpacity})`);
+            ctx.lineWidth = 1.5;
             ctx.stroke();
-            dirtyRef.current = true; // Keep animating pulse
+            dirtyRef.current = true;
           }
         }
 
@@ -439,24 +415,12 @@ export const GraphCanvas = memo<GraphCanvasProps>(
         }
 
         ctx.restore();
-      });
+      }
 
-      // Continue animation loop
       if (isAnimatingRef.current) {
         animationRef.current = requestAnimationFrame(draw);
       }
-    }, [
-      nodes,
-      edges,
-      panX,
-      panY,
-      zoom,
-      width,
-      height,
-      selectedNodeId,
-      highlightSet,
-      draggingNodeId,
-    ]);
+    }, [nodes, edges, panX, panY, zoom, width, height, selectedNodeId, highlightSet, draggingNodeId]);
 
     // Start/stop animation loop
     useEffect(() => {
@@ -472,8 +436,7 @@ export const GraphCanvas = memo<GraphCanvasProps>(
       };
     }, [draw]);
 
-    // Attach wheel listener natively with passive:false so preventDefault works.
-    // React's onWheel is passive by default — can't prevent page zoom/scroll.
+    // Attach wheel listener natively with passive:false
     useEffect(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
